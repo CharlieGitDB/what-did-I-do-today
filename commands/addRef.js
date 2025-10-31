@@ -1,7 +1,7 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { addContentToSection } from '../utils/fileHandler.js';
-import { generateThreeWordId } from '../utils/wordGenerator.js';
+import { addContentToSection, idExistsInAnyFile } from '../utils/fileHandler.js';
+import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 
 /**
  * Adds content to the references section with a unique 3-word identifier
@@ -28,7 +28,7 @@ export async function addRef(text) {
     content = answers.content;
   }
 
-  const refId = generateThreeWordId();
+  const refId = await generateUniqueThreeWordId(idExistsInAnyFile);
   const formattedContent = `#ref [${refId}]\n${content}\n#/ref`;
   await addContentToSection('References', formattedContent);
 

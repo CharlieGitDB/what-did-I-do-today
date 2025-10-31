@@ -8,9 +8,10 @@ import {
   getContextById,
   addContext,
   updateContext,
-  deleteContext
+  deleteContext,
+  idExistsInAnyFile
 } from '../utils/fileHandler.js';
-import { generateThreeWordId } from '../utils/wordGenerator.js';
+import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 
 /**
  * Deletes a todo from the section
@@ -241,7 +242,7 @@ export async function listTodos() {
         }
       ]);
 
-      const newContextId = generateThreeWordId();
+      const newContextId = await generateUniqueThreeWordId(idExistsInAnyFile);
       await addContext(newContextId, contextText);
 
       todaySection = await initializeTodaySection();

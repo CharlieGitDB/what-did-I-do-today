@@ -37,3 +37,23 @@ export function generateThreeWordId() {
 
   return `${adjective}-${verb}-${noun}`;
 }
+
+/**
+ * Generates a unique 3-word identifier that doesn't exist in any content
+ * @param {Function} checkExists - Async function that checks if an ID exists
+ * @param {number} maxAttempts - Maximum number of generation attempts (default: 100)
+ * @returns {Promise<string>} A unique 3-word identifier
+ * @throws {Error} If unable to generate unique ID after maxAttempts
+ */
+export async function generateUniqueThreeWordId(checkExists, maxAttempts = 100) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const id = generateThreeWordId();
+    const exists = await checkExists(id);
+
+    if (!exists) {
+      return id;
+    }
+  }
+
+  throw new Error(`Unable to generate unique ID after ${maxAttempts} attempts`);
+}

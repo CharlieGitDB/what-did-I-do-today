@@ -1,7 +1,7 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { initializeTodaySection, replaceTodaySection, addContext } from '../utils/fileHandler.js';
-import { generateThreeWordId } from '../utils/wordGenerator.js';
+import { initializeTodaySection, replaceTodaySection, addContext, idExistsInAnyFile } from '../utils/fileHandler.js';
+import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 
 /**
  * Adds a new todo item to today's notes
@@ -62,9 +62,9 @@ export async function addTodo(text, contextText) {
     }
   }
 
-  // Generate context ID and add context if provided
+  // Generate unique context ID and add context if provided
   if (finalContextText && finalContextText.trim()) {
-    contextId = generateThreeWordId();
+    contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
     await addContext(contextId, finalContextText);
   }
 

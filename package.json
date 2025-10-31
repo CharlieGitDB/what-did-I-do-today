@@ -10,12 +10,18 @@
   "scripts": {
     "test": "node bin/wdidt.js"
   },
-  "keywords": ["cli", "notes", "daily", "todo"],
+  "keywords": [
+    "cli",
+    "notes",
+    "daily",
+    "todo"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chalk": "^5.3.0",
     "commander": "^11.1.0",
-    "inquirer": "^9.2.12",
-    "chalk": "^5.3.0"
+    "glob": "^11.0.3",
+    "inquirer": "^9.2.12"
   }
 }

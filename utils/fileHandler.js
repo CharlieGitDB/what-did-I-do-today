@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getConfig } from './config.js';
+import { glob } from 'glob';
 
 /**
  * @typedef {Object} TodoItem
@@ -486,4 +487,43 @@ export async function deleteContext(contextId) {
   lines.splice(contextStartIdx, contextEndIdx - contextStartIdx);
 
   await replaceTodaySection(lines.join('\n'));
+}
+
+/**
+ * Gets all monthly notes files in the notes directory
+ * @returns {Promise<string[]>} Array of file paths for monthly notes
+ */
+export async function getAllMonthlyNotesFiles() {
+  const config = await getConfig();
+  const pattern = path.join(config.notesDirectory, '*-notes.md').replace(/\\/g, '/');
+  const files = await glob(pattern);
+  return files;
+}
+
+/**
+ * Checks if an ID (context or reference) exists in any monthly notes file
+ * @param {string} id - The ID to check for
+ * @returns {Promise<boolean>} True if the ID exists, false otherwise
+ */
+export async function idExistsInAnyFile(id) {
+  const files = await getAllMonthlyNotesFiles();
+
+  for (const file of files) {
+    if (fs.existsSync(file)) {
+      const content = fs.readFileSync(file, 'utf-8');
+
+      // Check for context IDs: **[id]** or [context: id]
+      const contextRegex1 = new RegExp(`\\*\\*\\[${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\*\\*`);
+      const contextRegex2 = new RegExp(`\\[context: ${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`);
+
+      // Check for reference IDs: #ref [id]
+      const refRegex = new RegExp(`#ref \\[${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`);
+
+      if (contextRegex1.test(content) || contextRegex2.test(content) || refRegex.test(content)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
