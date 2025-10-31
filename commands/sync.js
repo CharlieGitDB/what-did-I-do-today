@@ -1,0 +1,100 @@
+import fs from 'fs';
+import chalk from 'chalk';
+import { getConfig } from '../utils/config.js';
+import { getAllMonthlyNotesFiles } from '../utils/fileHandler.js';
+import { ConfluenceClient } from '../utils/confluenceClient.js';
+import { convertMarkdownFile } from '../utils/markdownToConfluence.js';
+import path from 'path';
+
+/**
+ * Syncs all monthly notes files to Confluence
+ * @returns {Promise<void>}
+ */
+export async function syncToConfluence() {
+  console.log(chalk.blue('🔄 Syncing notes to Confluence...\n'));
+
+  const config = getConfig();
+
+  // Check if Confluence is configured
+  if (!config || !config.confluence || !config.confluence.enabled) {
+    console.log(chalk.yellow('⚠ Confluence sync is not configured.'));
+    console.log(`Run ${chalk.cyan('wdidt confluence')} to set it up.\n`);
+    return;
+  }
+
+  const { baseUrl, email, apiToken, spaceKey, parentPageId } = config.confluence;
+
+  // Create Confluence client
+  const client = new ConfluenceClient(baseUrl, email, apiToken);
+
+  try {
+    // Get all monthly notes files
+    const files = await getAllMonthlyNotesFiles();
+
+    if (files.length === 0) {
+      console.log(chalk.yellow('No notes files found to sync.\n'));
+      return;
+    }
+
+    console.log(chalk.gray(`Found ${files.length} notes file(s) to sync...\n`));
+
+    let created = 0;
+    let updated = 0;
+    let errors = 0;
+
+    // Sync each file
+    for (const filePath of files) {
+      const fileName = path.basename(filePath, '.md');
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      // Extract the month/year from content (first line should be # Month Year)
+      const firstLine = content.split('\n')[0];
+      const titleMatch = firstLine.match(/^#\s+(.+)$/);
+      const pageTitle = titleMatch ? titleMatch[1] : fileName;
+
+      try {
+        // Convert markdown to Confluence format
+        const confluenceContent = convertMarkdownFile(content);
+
+        // Create or update page
+        const result = await client.createOrUpdatePage(
+          spaceKey,
+          `Daily Notes - ${pageTitle}`,
+          confluenceContent,
+          parentPageId || undefined
+        );
+
+        if (result.action === 'created') {
+          console.log(chalk.green(`✓ Created: ${pageTitle}`));
+          created++;
+        } else {
+          console.log(chalk.blue(`✓ Updated: ${pageTitle}`));
+          updated++;
+        }
+      } catch (error) {
+        console.log(chalk.red(`✗ Failed: ${pageTitle} - ${error.message}`));
+        errors++;
+      }
+    }
+
+    // Summary
+    console.log(chalk.gray('\n───────────────────'));
+    console.log(chalk.green(`✓ Created: ${created}`));
+    console.log(chalk.blue(`✓ Updated: ${updated}`));
+    if (errors > 0) {
+      console.log(chalk.red(`✗ Errors: ${errors}`));
+    }
+    console.log(chalk.gray('───────────────────\n'));
+
+    if (errors === 0) {
+      console.log(chalk.green('🎉 All notes synced successfully!\n'));
+    } else {
+      console.log(chalk.yellow('⚠ Some notes failed to sync. Check the errors above.\n'));
+    }
+  } catch (error) {
+    console.log(chalk.red(`\n✗ Sync failed: ${error.message}\n`));
+    if (error.message.includes('401') || error.message.includes('403')) {
+      console.log(chalk.yellow('Check your Confluence credentials with: wdidt confluence\n'));
+    }
+  }
+}

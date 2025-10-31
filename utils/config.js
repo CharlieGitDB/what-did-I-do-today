@@ -7,8 +7,19 @@ const CONFIG_DIR = path.join(os.homedir(), '.wdidt');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 /**
+ * @typedef {Object} ConfluenceConfig
+ * @property {boolean} enabled - Whether Confluence sync is enabled
+ * @property {string} baseUrl - Confluence instance URL (e.g., https://yourcompany.atlassian.net)
+ * @property {string} email - User email for authentication
+ * @property {string} apiToken - API token for authentication
+ * @property {string} spaceKey - Confluence space key where notes will be synced
+ * @property {string} parentPageId - Parent page ID under which notes will be created
+ */
+
+/**
  * @typedef {Object} Config
  * @property {string} notesDirectory - The directory where notes are stored
+ * @property {ConfluenceConfig} [confluence] - Confluence sync configuration
  */
 
 /**
@@ -69,6 +80,12 @@ export async function promptFirstTimeSetup() {
         }
         return true;
       }
+    },
+    {
+      type: 'confirm',
+      name: 'setupConfluence',
+      message: 'Would you like to sync your notes to Confluence?',
+      default: false
     }
   ]);
 
@@ -86,7 +103,112 @@ export async function promptFirstTimeSetup() {
   writeConfig(config);
   console.log(`\n✓ Configuration saved! Your notes will be stored in: ${notesDir}\n`);
 
+  if (answers.setupConfluence) {
+    console.log('\nLet\'s set up Confluence sync...\n');
+    const confluenceConfig = await promptConfluenceSetup();
+    config.confluence = confluenceConfig;
+    writeConfig(config);
+  }
+
   return config;
+}
+
+/**
+ * Prompts the user to configure Confluence sync
+ * @returns {Promise<ConfluenceConfig>} The Confluence configuration
+ */
+export async function promptConfluenceSetup() {
+  const hasApiKey = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'hasKey',
+      message: 'Do you have a Confluence API token?',
+      default: false
+    }
+  ]);
+
+  if (!hasApiKey.hasKey) {
+    console.log('\n📝 To create a Confluence API token:');
+    console.log('1. Go to: https://id.atlassian.com/manage-profile/security/api-tokens');
+    console.log('2. Click "Create API token"');
+    console.log('3. Give it a label like "wdidt"');
+    console.log('4. Copy the token');
+    console.log('\nAfter creating your token, run: wdidt confluence\n');
+
+    return {
+      enabled: false,
+      baseUrl: '',
+      email: '',
+      apiToken: '',
+      spaceKey: '',
+      parentPageId: ''
+    };
+  }
+
+  const confluenceAnswers = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'baseUrl',
+      message: 'Confluence URL (e.g., https://yourcompany.atlassian.net):',
+      validate: (input) => {
+        if (!input.trim()) {
+          return 'Please enter your Confluence URL';
+        }
+        if (!input.startsWith('http')) {
+          return 'URL must start with http:// or https://';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'input',
+      name: 'email',
+      message: 'Your Confluence email:',
+      validate: (input) => {
+        if (!input.trim() || !input.includes('@')) {
+          return 'Please enter a valid email';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'password',
+      name: 'apiToken',
+      message: 'Your Confluence API token:',
+      validate: (input) => {
+        if (!input.trim()) {
+          return 'Please enter your API token';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'input',
+      name: 'spaceKey',
+      message: 'Confluence space key (e.g., MYSPACE):',
+      validate: (input) => {
+        if (!input.trim()) {
+          return 'Please enter a space key';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'input',
+      name: 'parentPageId',
+      message: 'Parent page ID (optional - leave empty to create at space root):',
+      default: ''
+    }
+  ]);
+
+  return {
+    enabled: true,
+    baseUrl: confluenceAnswers.baseUrl.replace(/\/$/, ''), // Remove trailing slash
+    email: confluenceAnswers.email,
+    apiToken: confluenceAnswers.apiToken,
+    spaceKey: confluenceAnswers.spaceKey,
+    parentPageId: confluenceAnswers.parentPageId
+  };
 }
 
 /**

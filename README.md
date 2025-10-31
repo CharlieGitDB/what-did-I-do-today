@@ -138,10 +138,47 @@ When a new month starts, a new file is automatically created (e.g., `2024-11-not
 
 Todos can reference context using unique 3-word identifiers (e.g., `[context: calm-thinks-moon]`). The context details are stored in the Context section, keeping your todos clean while maintaining detailed information.
 
+## Confluence Sync
+
+Sync your daily notes to Confluence for easy sharing and collaboration.
+
+### Setup Confluence Sync
+
+**First-time setup:**
+During initial configuration, you'll be asked if you want to sync to Confluence.
+
+**Configure later:**
+```bash
+wdidt confluence
+```
+
+**Steps:**
+1. Create a Confluence API token at: https://id.atlassian.com/manage-profile/security/api-tokens
+2. Run `wdidt confluence` and provide:
+   - Confluence URL (e.g., https://yourcompany.atlassian.net)
+   - Your email
+   - API token
+   - Space key where notes will be synced
+   - (Optional) Parent page ID
+
+### Sync Notes
+
+```bash
+wdidt sync
+```
+
+This will:
+- Convert all monthly notes files to Confluence format
+- Create new pages or update existing ones
+- Maintain your notes structure in Confluence
+- Show a summary of created/updated pages
+
+**Page naming:** Files are synced as "Daily Notes - Month Year" (e.g., "Daily Notes - October 2025")
+
 ## TypeScript Support
 
 All files include JSDoc comments for IDE type checking and IntelliSense support.
 
 ## Configuration
 
-Configuration is stored in `~/.wdidt/config.json`. The notes directory path can be changed by editing this file.
+Configuration is stored in `~/.wdidt/config.json`. The notes directory path and Confluence settings can be changed by editing this file or running the respective configuration commands.

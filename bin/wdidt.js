@@ -10,6 +10,8 @@ import { addTodo } from '../commands/addTodo.js';
 import { listTodos } from '../commands/listTodos.js';
 import { addRef } from '../commands/addRef.js';
 import { addNote } from '../commands/addNote.js';
+import { configureConfluence } from '../commands/confluence.js';
+import { syncToConfluence } from '../commands/sync.js';
 
 const program = new Command();
 
@@ -47,5 +49,15 @@ program
   .action((text) => {
     addNote(text.join(' '));
   });
+
+program
+  .command('confluence')
+  .description('Configure Confluence sync settings')
+  .action(configureConfluence);
+
+program
+  .command('sync')
+  .description('Sync all notes to Confluence')
+  .action(syncToConfluence);
 
 program.parse();
