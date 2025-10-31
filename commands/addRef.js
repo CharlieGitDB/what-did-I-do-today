@@ -30,7 +30,7 @@ export async function addRef(text) {
 
   const refId = generateThreeWordId();
   const formattedContent = `#ref [${refId}]\n${content}\n#/ref`;
-  await addContentToSection('## References', formattedContent);
+  await addContentToSection('References', formattedContent);
 
   console.log(chalk.green('✓') + ` Reference saved with ID: ${chalk.cyan(refId)}`);
 }

@@ -18,12 +18,34 @@ import { getConfig } from './config.js';
  */
 
 /**
- * Gets the path to the notes file
- * @returns {Promise<string>} The path to the notes file
+ * Gets the current month in YYYY-MM format
+ * @returns {string} Current month string
+ */
+export function getCurrentMonthString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+/**
+ * Gets the month and year display string (e.g., "October 2024")
+ * @returns {string} Month and year display string
+ */
+export function getMonthYearDisplay() {
+  const today = new Date();
+  const options = { year: 'numeric', month: 'long' };
+  return today.toLocaleDateString('en-US', options);
+}
+
+/**
+ * Gets the path to the notes file for the current month
+ * @returns {Promise<string>} The path to the current month's notes file
  */
 export async function getNotesFilePath() {
   const config = await getConfig();
-  return path.join(config.notesDirectory, 'notes.md');
+  const monthString = getCurrentMonthString();
+  return path.join(config.notesDirectory, `${monthString}-notes.md`);
 }
 
 /**
@@ -48,7 +70,7 @@ export function getTodayString() {
 }
 
 /**
- * Reads the notes file
+ * Reads the notes file for the current month
  * @returns {Promise<string>} The content of the notes file
  */
 export async function readNotesFile() {
@@ -56,7 +78,10 @@ export async function readNotesFile() {
   const notesFile = await getNotesFilePath();
 
   if (!fs.existsSync(notesFile)) {
-    return '';
+    // Create new monthly file with header
+    const monthYearHeader = `# ${getMonthYearDisplay()}\n\n`;
+    await writeNotesFile(monthYearHeader);
+    return monthYearHeader;
   }
 
   return fs.readFileSync(notesFile, 'utf-8');
@@ -80,7 +105,7 @@ export async function writeNotesFile(content) {
  */
 export function getTodaySection(content) {
   const today = getTodayString();
-  const todayHeaderRegex = new RegExp(`^# ${today.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm');
+  const todayHeaderRegex = new RegExp(`^## ${today.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm');
 
   if (!todayHeaderRegex.test(content)) {
     return null;
@@ -91,9 +116,9 @@ export function getTodaySection(content) {
   let endIdx = lines.length;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === `# ${today}`) {
+    if (lines[i] === `## ${today}`) {
       startIdx = i;
-    } else if (startIdx !== -1 && lines[i].startsWith('# ') && i > startIdx) {
+    } else if (startIdx !== -1 && lines[i].startsWith('## ') && i > startIdx) {
       endIdx = i;
       break;
     }
@@ -119,12 +144,23 @@ export async function initializeTodaySection() {
   const todaySection = getTodaySection(content);
 
   if (!todaySection) {
-    const newSection = `# ${today}\n\n## Todos\n\n## Context\n\n## References\n\n## Notes\n\n`;
+    const newSection = `## ${today}\n\n### Todos\n\n### Context\n\n### References\n\n### Notes\n\n`;
 
-    if (content.trim()) {
-      await writeNotesFile(newSection + '\n---\n\n' + content);
+    // Get the monthly header
+    const monthHeader = `# ${getMonthYearDisplay()}\n\n`;
+
+    // Check if content already has the monthly header
+    const hasMonthHeader = content.startsWith(monthHeader) || content.startsWith(`# ${getMonthYearDisplay()}`);
+
+    if (content.trim() && hasMonthHeader) {
+      // Append to existing monthly file
+      await writeNotesFile(content + '\n' + newSection);
+    } else if (content.trim() && !hasMonthHeader) {
+      // Prepend monthly header if missing
+      await writeNotesFile(monthHeader + newSection);
     } else {
-      await writeNotesFile(newSection);
+      // New file, just write the section
+      await writeNotesFile(monthHeader + newSection);
     }
 
     return newSection;
@@ -146,12 +182,12 @@ export function extractTodos(sectionContent) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '## Todos') {
+    if (line === '### Todos') {
       inTodoSection = true;
       continue;
     }
 
-    if (line.startsWith('## ') && line !== '## Todos') {
+    if (line.startsWith('### ') && line !== '### Todos') {
       inTodoSection = false;
     }
 
@@ -244,16 +280,16 @@ export async function addContentToSection(sectionName, content) {
   let nextSectionIdx = lines.length;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === `## ${sectionName}`) {
+    if (lines[i] === `### ${sectionName}`) {
       sectionIdx = i;
-    } else if (sectionIdx !== -1 && lines[i].startsWith('## ')) {
+    } else if (sectionIdx !== -1 && lines[i].startsWith('### ')) {
       nextSectionIdx = i;
       break;
     }
   }
 
   if (sectionIdx === -1) {
-    lines.push(`## ${sectionName}`);
+    lines.push(`### ${sectionName}`);
     lines.push('');
     lines.push(content);
     lines.push('');
@@ -286,7 +322,7 @@ export async function addContentToSection(sectionName, content) {
  */
 export async function addContext(contextId, contextText) {
   const formattedContent = `**[${contextId}]**\n${contextText}`;
-  await addContentToSection('## Context', formattedContent);
+  await addContentToSection('Context', formattedContent);
 }
 
 /**
@@ -304,12 +340,12 @@ export function getContextById(sectionContent, contextId) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '## Context') {
+    if (line === '### Context') {
       inContextSection = true;
       continue;
     }
 
-    if (line.startsWith('## ') && line !== '## Context') {
+    if (line.startsWith('### ') && line !== '### Context') {
       if (foundContext) break;
       inContextSection = false;
     }
@@ -352,12 +388,12 @@ export async function updateContext(contextId, newContextText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '## Context') {
+    if (line === '### Context') {
       inContextSection = true;
       continue;
     }
 
-    if (line.startsWith('## ') && line !== '## Context') {
+    if (line.startsWith('### ') && line !== '### Context') {
       if (contextStartIdx !== -1) {
         contextEndIdx = i;
         break;
@@ -406,12 +442,12 @@ export async function deleteContext(contextId) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '## Context') {
+    if (line === '### Context') {
       inContextSection = true;
       continue;
     }
 
-    if (line.startsWith('## ') && line !== '## Context') {
+    if (line.startsWith('### ') && line !== '### Context') {
       if (contextStartIdx !== -1) {
         contextEndIdx = i;
         break;
@@ -436,7 +472,7 @@ export async function deleteContext(contextId) {
   if (contextEndIdx === -1) {
     // Find the next non-empty line or end
     for (let i = contextStartIdx + 1; i < lines.length; i++) {
-      if (lines[i].startsWith('## ') || (lines[i].trim() && lines[i].match(/^\*\*\[.+\]\*\*$/))) {
+      if (lines[i].startsWith('### ') || (lines[i].trim() && lines[i].match(/^\*\*\[.+\]\*\*$/))) {
         contextEndIdx = i;
         break;
       }

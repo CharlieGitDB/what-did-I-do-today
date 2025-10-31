@@ -75,9 +75,9 @@ export async function addTodo(text, contextText) {
   let insertIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === '## Todos') {
+    if (lines[i] === '### Todos') {
       todoSectionIdx = i;
-    } else if (todoSectionIdx !== -1 && lines[i].startsWith('## ')) {
+    } else if (todoSectionIdx !== -1 && lines[i].startsWith('### ')) {
       insertIdx = i;
       break;
     }

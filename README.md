@@ -88,23 +88,25 @@ Adds a quick note or random thought to your daily notes.
 
 ## Notes Format
 
-Each day's notes follow this structure:
+Notes are organized by month in separate files (e.g., `2024-10-notes.md`). Each monthly file contains:
 
 ```markdown
-# Thursday, October 31, 2024
+# October 2024
 
-## Todos
+## Thursday, October 31, 2024
+
+### Todos
 
 - [ ] Deploy to production [context: calm-thinks-moon]
 - [x] Update documentation
 - [ ] Review pull requests
 
-## Context
+### Context
 
 **[calm-thinks-moon]**
 Make sure to backup database first and notify the team
 
-## References
+### References
 
 #ref [quick-runs-fox]
 curl -X POST https://api.example.com/endpoint
@@ -114,16 +116,25 @@ curl -X POST https://api.example.com/endpoint
 docker ps --format 'table {{.Names}}\t{{.Status}}'
 #/ref
 
-## Notes
+### Notes
 
 remember to check on that deployment
 
 random thought about the project architecture
 
----
+## Friday, November 1, 2024
 
-# Previous days...
+### Todos
+...
 ```
+
+**File Structure:**
+- `#` = Month and year header (October 2024)
+- `##` = Daily entries (Thursday, October 31, 2024)
+- `###` = Sections (Todos, Context, References, Notes)
+
+**Monthly Files:**
+When a new month starts, a new file is automatically created (e.g., `2024-11-notes.md`). This keeps your notes organized and prevents any single file from becoming too large.
 
 Todos can reference context using unique 3-word identifiers (e.g., `[context: calm-thinks-moon]`). The context details are stored in the Context section, keeping your todos clean while maintaining detailed information.
 
