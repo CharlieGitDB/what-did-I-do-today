@@ -193,32 +193,92 @@ export function extractTodos(sectionContent) {
     }
 
     if (inTodoSection && line.trim()) {
-      // Match Confluence task format: <li><ac:task><ac:task-status>complete|incomplete</ac:task-status><ac:task-body>...</ac:task-body></ac:task></li>
-      const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+      // Match Confluence task format with optional id: <li id="todo-1"><ac:task>...
+      const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
       if (todoMatch) {
-        let text = todoMatch[2];
+        const todoId = todoMatch[1] || null;
+        let text = todoMatch[3];
         let contextId = null;
-        const checked = todoMatch[1] === 'complete';
+        const checked = todoMatch[2] === 'complete';
 
-        // Check if there's a context ID in the format [context: id]
-        const contextMatch = text.match(/\[context: ([^\]]+)\]$/);
-        if (contextMatch) {
-          contextId = contextMatch[1];
-          // Remove the context part from the text
-          text = text.replace(/\s*\[context: [^\]]+\]$/, '');
+        // Check if there's a context link or old-style reference
+        const anchorMatch = text.match(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/);
+        const oldContextMatch = text.match(/\[context: ([^\]]+)\]$/);
+
+        if (anchorMatch) {
+          contextId = anchorMatch[1];
+          // Remove the anchor tag from the text
+          text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/, '').trim();
+        } else if (oldContextMatch) {
+          contextId = oldContextMatch[1];
+          // Remove the old context part from the text
+          text = text.replace(/\s*\[context: [^\]]+\]$/, '').trim();
         }
 
         todos.push({
           checked: checked,
           text: text,
           lineNumber: i,
-          contextId: contextId
+          contextId: contextId,
+          todoId: todoId
         });
       }
     }
   }
 
   return todos;
+}
+
+/**
+ * Gets the next available todo ID number
+ * @param {string} sectionContent - The section content
+ * @returns {number} The next available todo ID number
+ */
+export function getNextTodoId(sectionContent) {
+  const lines = sectionContent.split('\n');
+  let maxId = 0;
+  let inTodoSection = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line === '<h3>Todos</h3>') {
+      inTodoSection = true;
+      continue;
+    }
+
+    if (line.startsWith('<h3>') && line !== '<h3>Todos</h3>') {
+      inTodoSection = false;
+    }
+
+    if (inTodoSection && line.trim()) {
+      const idMatch = line.match(/<li id="todo-(\d+)">/);
+      if (idMatch) {
+        const id = parseInt(idMatch[1], 10);
+        if (id > maxId) {
+          maxId = id;
+        }
+      }
+    }
+  }
+
+  return maxId + 1;
+}
+
+/**
+ * Gets all todos that reference a specific context
+ * @param {string} sectionContent - The section content
+ * @param {string} contextId - The context ID to find references for
+ * @returns {Array<{todoId: string, text: string}>} Array of todos referencing this context
+ */
+export function getTodosReferencingContext(sectionContent, contextId) {
+  const todos = extractTodos(sectionContent);
+  return todos
+    .filter(todo => todo.contextId === contextId && todo.todoId)
+    .map(todo => ({
+      todoId: todo.todoId,
+      text: todo.text
+    }));
 }
 
 /**
@@ -233,10 +293,19 @@ export function updateTodoInSection(sectionContent, lineNumber, checked) {
   const line = lines[lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+    // Match with optional id attribute
+    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
     if (todoMatch) {
+      const todoId = todoMatch[1];
       const status = checked ? 'complete' : 'incomplete';
-      lines[lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${todoMatch[2]}</ac:task-body></ac:task></li>`;
+      const body = todoMatch[3];
+
+      // Preserve ID if present
+      if (todoId) {
+        lines[lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${body}</ac:task-body></ac:task></li>`;
+      } else {
+        lines[lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${body}</ac:task-body></ac:task></li>`;
+      }
     }
   }
 
@@ -325,7 +394,7 @@ export async function addContentToSection(sectionName, content) {
  * @returns {Promise<void>}
  */
 export async function addContext(contextId, contextText) {
-  const formattedContent = `<p><strong>[${contextId}]</strong></p>\n<p>${contextText}</p>`;
+  const formattedContent = `<div id="context-${contextId}" style="border-left: 3px solid #0066cc; padding-left: 10px; margin-bottom: 15px;">\n<p><strong>[${contextId}]</strong></p>\n<p>${contextText}</p>\n</div>`;
   await addContentToSection('Context', formattedContent);
 }
 
@@ -338,7 +407,7 @@ export async function addContext(contextId, contextText) {
 export function getContextById(sectionContent, contextId) {
   const lines = sectionContent.split('\n');
   let inContextSection = false;
-  let foundContext = false;
+  let inContextDiv = false;
   const contextLines = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -350,29 +419,41 @@ export function getContextById(sectionContent, contextId) {
     }
 
     if (line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
-      if (foundContext) break;
       inContextSection = false;
+      break;
     }
 
     if (inContextSection) {
-      if (line === `<p><strong>[${contextId}]</strong></p>`) {
-        foundContext = true;
+      // Check for div start with context ID (new format)
+      if (line.includes(`id="context-${contextId}"`)) {
+        inContextDiv = true;
         continue;
       }
 
-      if (foundContext) {
-        // Check if we hit another context ID
-        if (line.match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
+      // Check for old format
+      if (line === `<p><strong>[${contextId}]</strong></p>`) {
+        inContextDiv = true;
+        continue;
+      }
+
+      if (inContextDiv) {
+        // Check for end of div
+        if (line === '</div>') {
           break;
         }
-        if (line.trim()) {
+        // Check if we hit another context (old format)
+        if (line.match(/<p><strong>\[.+\]<\/strong><\/p>/) || line.includes('id="context-')) {
+          break;
+        }
+        // Collect context lines (skip the ID line)
+        if (line.trim() && !line.includes(`[${contextId}]`)) {
           contextLines.push(line);
         }
       }
     }
   }
 
-  return contextLines.length > 0 ? contextLines.join('\n') : null;
+  return contextLines.length > 0 ? contextLines.join('\n').replace(/<\/?p>/g, '').trim() : null;
 }
 
 /**
@@ -406,11 +487,18 @@ export async function updateContext(contextId, newContextText) {
     }
 
     if (inContextSection) {
-      if (line === `<p><strong>[${contextId}]</strong></p>`) {
+      // Check for new div format
+      if (line.includes(`id="context-${contextId}"`)) {
         contextStartIdx = i;
-      } else if (contextStartIdx !== -1 && line.match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
-        contextEndIdx = i;
-        break;
+      } else if (line === `<p><strong>[${contextId}]</strong></p>`) {
+        // Old format
+        contextStartIdx = i;
+      } else if (contextStartIdx !== -1) {
+        // Check for end of context block
+        if (line === '</div>' || line.match(/<p><strong>\[.+\]<\/strong><\/p>/) || line.includes('id="context-')) {
+          contextEndIdx = i;
+          break;
+        }
       }
     }
   }
@@ -423,9 +511,15 @@ export async function updateContext(contextId, newContextText) {
     contextEndIdx = lines.length;
   }
 
-  // Remove old context lines (excluding the ID line)
-  const linesToRemove = contextEndIdx - contextStartIdx - 1;
-  lines.splice(contextStartIdx + 1, linesToRemove, `<p>${newContextText}</p>`);
+  // Replace the entire context block with updated version
+  const newContextBlock = [
+    `<div id="context-${contextId}" style="border-left: 3px solid #0066cc; padding-left: 10px; margin-bottom: 15px;">`,
+    `<p><strong>[${contextId}]</strong></p>`,
+    `<p>${newContextText}</p>`,
+    `</div>`
+  ];
+
+  lines.splice(contextStartIdx, contextEndIdx - contextStartIdx, ...newContextBlock);
 
   await replaceTodaySection(lines.join('\n'));
 }
@@ -460,11 +554,21 @@ export async function deleteContext(contextId) {
     }
 
     if (inContextSection) {
-      if (line === `<p><strong>[${contextId}]</strong></p>`) {
+      // Check for new div format
+      if (line.includes(`id="context-${contextId}"`)) {
         contextStartIdx = i;
-      } else if (contextStartIdx !== -1 && line.match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
-        contextEndIdx = i;
-        break;
+      } else if (line === `<p><strong>[${contextId}]</strong></p>`) {
+        // Old format
+        contextStartIdx = i;
+      } else if (contextStartIdx !== -1) {
+        // Check for end of context block
+        if (line === '</div>') {
+          contextEndIdx = i + 1; // Include the closing div
+          break;
+        } else if (line.match(/<p><strong>\[.+\]<\/strong><\/p>/) || line.includes('id="context-')) {
+          contextEndIdx = i;
+          break;
+        }
       }
     }
   }
@@ -474,9 +578,9 @@ export async function deleteContext(contextId) {
   }
 
   if (contextEndIdx === -1) {
-    // Find the next non-empty line or end
+    // Find the next context or end
     for (let i = contextStartIdx + 1; i < lines.length; i++) {
-      if (lines[i].startsWith('<h3>') || (lines[i].trim() && lines[i].match(/<p><strong>\[.+\]<\/strong><\/p>/))) {
+      if (lines[i].startsWith('<h3>') || lines[i].includes('id="context-') || lines[i].match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
         contextEndIdx = i;
         break;
       }
@@ -486,7 +590,7 @@ export async function deleteContext(contextId) {
     }
   }
 
-  // Remove the context block including empty lines
+  // Remove the context block
   lines.splice(contextStartIdx, contextEndIdx - contextStartIdx);
 
   await replaceTodaySection(lines.join('\n'));
@@ -517,7 +621,7 @@ export function getAllContexts(sectionContent) {
       if (currentContextId && currentContextLines.length > 0) {
         contexts.push({
           id: currentContextId,
-          text: currentContextLines.join('\n').replace(/<\/?p>/g, '').trim()
+          text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
         });
       }
       inContextSection = false;
@@ -525,20 +629,36 @@ export function getAllContexts(sectionContent) {
     }
 
     if (inContextSection) {
-      const idMatch = line.match(/<p><strong>\[(.+)\]<\/strong><\/p>/);
-      if (idMatch) {
+      // Check for new div format with ID
+      const divMatch = line.match(/id="context-([^"]+)"/);
+      if (divMatch) {
         // Save previous context if any
         if (currentContextId && currentContextLines.length > 0) {
           contexts.push({
             id: currentContextId,
-            text: currentContextLines.join('\n').replace(/<\/?p>/g, '').trim()
+            text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
           });
         }
         // Start new context
-        currentContextId = idMatch[1];
+        currentContextId = divMatch[1];
         currentContextLines = [];
-      } else if (currentContextId && line.trim()) {
-        currentContextLines.push(line);
+      } else {
+        // Check for old format
+        const idMatch = line.match(/<p><strong>\[(.+)\]<\/strong><\/p>/);
+        if (idMatch) {
+          // Save previous context if any
+          if (currentContextId && currentContextLines.length > 0) {
+            contexts.push({
+              id: currentContextId,
+              text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
+            });
+          }
+          // Start new context
+          currentContextId = idMatch[1];
+          currentContextLines = [];
+        } else if (currentContextId && line.trim() && line !== '</div>' && !line.includes(`[${currentContextId}]`)) {
+          currentContextLines.push(line);
+        }
       }
     }
   }
@@ -547,7 +667,7 @@ export function getAllContexts(sectionContent) {
   if (currentContextId && currentContextLines.length > 0) {
     contexts.push({
       id: currentContextId,
-      text: currentContextLines.join('\n').replace(/<\/?p>/g, '').trim()
+      text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
     });
   }
 

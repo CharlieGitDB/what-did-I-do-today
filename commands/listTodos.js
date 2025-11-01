@@ -11,7 +11,8 @@ import {
   updateContext,
   deleteContext,
   idExistsInAnyFile,
-  getAllContexts
+  getAllContexts,
+  getTodosReferencingContext
 } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 
@@ -164,16 +165,29 @@ async function editTodo(todos, todaySection) {
   const line = lines[selectedTodoItem.lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
     if (todoMatch) {
-      const status = todoMatch[1];
-      const oldText = todoMatch[2];
+      const todoId = todoMatch[1];
+      const status = todoMatch[2];
+      const oldText = todoMatch[3];
 
-      // Extract context if present
-      const contextMatch = oldText.match(/\[context: ([^\]]+)\]$/);
-      const contextPart = contextMatch ? ` [context: ${contextMatch[1]}]` : '';
+      // Extract context if present (both old and new format)
+      const anchorMatch = oldText.match(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/);
+      const oldContextMatch = oldText.match(/\[context: ([^\]]+)\]$/);
 
-      lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
+      let contextPart = '';
+      if (anchorMatch) {
+        contextPart = ` <a href="#context-${anchorMatch[1]}" style="color: #0066cc;">📎 ${anchorMatch[1]}</a>`;
+      } else if (oldContextMatch) {
+        contextPart = ` <a href="#context-${oldContextMatch[1]}" style="color: #0066cc;">📎 ${oldContextMatch[1]}</a>`;
+      }
+
+      // Preserve ID if present
+      if (todoId) {
+        lines[selectedTodoItem.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
+      } else {
+        lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
+      }
     }
   }
 
@@ -287,11 +301,21 @@ async function addContextToTodo(todos, todaySection) {
   const line = lines[selectedTodoItem.lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
     if (todoMatch) {
-      const status = todoMatch[1];
-      const text = todoMatch[2];
-      lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text} [context: ${newContextId}]</ac:task-body></ac:task></li>`;
+      const todoId = todoMatch[1];
+      const status = todoMatch[2];
+      const text = todoMatch[3];
+
+      // Use anchor link for context
+      const contextLink = `<a href="#context-${newContextId}" style="color: #0066cc;">📎 ${newContextId}</a>`;
+
+      // Preserve ID if present
+      if (todoId) {
+        lines[selectedTodoItem.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text} ${contextLink}</ac:task-body></ac:task></li>`;
+      } else {
+        lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text} ${contextLink}</ac:task-body></ac:task></li>`;
+      }
     }
   }
 
@@ -404,15 +428,22 @@ async function editTodoContext(todos, todaySection) {
       const line = lines[selectedTodoItem.lineNumber];
 
       if (line) {
-        const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+        const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
         if (todoMatch) {
-          const status = todoMatch[1];
-          let text = todoMatch[2];
+          const todoId = todoMatch[1];
+          const status = todoMatch[2];
+          let text = todoMatch[3];
 
-          // Remove context reference
-          text = text.replace(/\s*\[context: [^\]]+\]$/, '');
+          // Remove context reference (both old and new format)
+          text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/, '').trim();
+          text = text.replace(/\s*\[context: [^\]]+\]$/, '').trim();
 
-          lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
+          // Preserve ID if present
+          if (todoId) {
+            lines[selectedTodoItem.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
+          } else {
+            lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
+          }
         }
       }
 
@@ -425,7 +456,7 @@ async function editTodoContext(todos, todaySection) {
 }
 
 /**
- * Displays all contexts in a table format
+ * Displays all contexts in a table format with bidirectional links
  * @param {string} todaySection - Today's section content
  * @returns {Promise<void>}
  */
@@ -440,11 +471,11 @@ async function viewContextsTable(todaySection) {
   }
 
   console.log();
-  console.log(chalk.bold.cyan('  📊 All Contexts\n'));
+  console.log(chalk.bold.cyan('  📊 All Contexts with Backlinks\n'));
 
   const table = new Table({
-    head: [chalk.cyan('ID'), chalk.cyan('Context')],
-    colWidths: [25, 40],
+    head: [chalk.cyan('ID'), chalk.cyan('Context'), chalk.cyan('Linked Todos')],
+    colWidths: [25, 35, 25],
     wordWrap: true,
     style: {
       head: [],
@@ -453,7 +484,17 @@ async function viewContextsTable(todaySection) {
   });
 
   contexts.forEach(ctx => {
-    table.push([chalk.yellow(ctx.id), chalk.white(ctx.text)]);
+    // Get todos that reference this context
+    const referencingTodos = getTodosReferencingContext(todaySection, ctx.id);
+    const todoLinks = referencingTodos.length > 0
+      ? referencingTodos.map(t => `→ ${t.todoId}`).join('\n')
+      : chalk.gray('(none)');
+
+    table.push([
+      chalk.yellow(ctx.id),
+      chalk.white(ctx.text),
+      chalk.green(todoLinks)
+    ]);
   });
 
   console.log(table.toString());

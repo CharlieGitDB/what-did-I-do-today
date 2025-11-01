@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { initializeTodaySection, replaceTodaySection, addContext, idExistsInAnyFile } from '../utils/fileHandler.js';
+import { initializeTodaySection, replaceTodaySection, addContext, idExistsInAnyFile, getNextTodoId } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 
 /**
@@ -101,9 +101,16 @@ export async function addTodo(text, contextText) {
     insertIdx = todoSectionIdx + 2;
   }
 
-  const todoLine = contextId
-    ? `<li><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText} [context: ${contextId}]</ac:task-body></ac:task></li>`
-    : `<li><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText}</ac:task-body></ac:task></li>`;
+  // Get next sequential todo ID
+  const todoId = getNextTodoId(todaySection);
+
+  // Create todo line with ID and optional context anchor link
+  let todoLine;
+  if (contextId) {
+    todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></ac:task-body></ac:task></li>`;
+  } else {
+    todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText}</ac:task-body></ac:task></li>`;
+  }
 
   lines.splice(insertIdx, 0, todoLine);
 
