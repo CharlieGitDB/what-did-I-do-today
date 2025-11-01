@@ -493,6 +493,68 @@ export async function deleteContext(contextId) {
 }
 
 /**
+ * Gets all contexts from the section
+ * @param {string} sectionContent - The section content
+ * @returns {Array<{id: string, text: string}>} Array of context objects
+ */
+export function getAllContexts(sectionContent) {
+  const lines = sectionContent.split('\n');
+  const contexts = [];
+  let inContextSection = false;
+  let currentContextId = null;
+  let currentContextLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line === '<h3>Context</h3>') {
+      inContextSection = true;
+      continue;
+    }
+
+    if (line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
+      // Save any pending context
+      if (currentContextId && currentContextLines.length > 0) {
+        contexts.push({
+          id: currentContextId,
+          text: currentContextLines.join('\n').replace(/<\/?p>/g, '').trim()
+        });
+      }
+      inContextSection = false;
+      break;
+    }
+
+    if (inContextSection) {
+      const idMatch = line.match(/<p><strong>\[(.+)\]<\/strong><\/p>/);
+      if (idMatch) {
+        // Save previous context if any
+        if (currentContextId && currentContextLines.length > 0) {
+          contexts.push({
+            id: currentContextId,
+            text: currentContextLines.join('\n').replace(/<\/?p>/g, '').trim()
+          });
+        }
+        // Start new context
+        currentContextId = idMatch[1];
+        currentContextLines = [];
+      } else if (currentContextId && line.trim()) {
+        currentContextLines.push(line);
+      }
+    }
+  }
+
+  // Don't forget the last context
+  if (currentContextId && currentContextLines.length > 0) {
+    contexts.push({
+      id: currentContextId,
+      text: currentContextLines.join('\n').replace(/<\/?p>/g, '').trim()
+    });
+  }
+
+  return contexts;
+}
+
+/**
  * Gets all monthly notes files in the notes directory
  * @returns {Promise<string[]>} Array of file paths for monthly notes
  */
