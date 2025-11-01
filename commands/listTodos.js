@@ -93,8 +93,14 @@ async function showTodoList() {
       // Toggle completion
       if (todos.length > 0 && selectedIndex < todos.length) {
         const todo = todos[selectedIndex];
-        const updatedSection = updateTodoInSection(todaySection, todo.lineNumber, !todo.checked);
+        const newStatus = !todo.checked;
+        const updatedSection = updateTodoInSection(todaySection, todo.lineNumber, newStatus);
         await replaceTodaySection(updatedSection);
+
+        // Verify the update worked by re-extracting
+        const verifySection = await initializeTodaySection();
+        const verifyTodos = extractTodos(verifySection);
+        // Keep selection on same item
       }
     } else if (key === 'e' || key === 'E') {
       // Edit todo
@@ -139,26 +145,36 @@ async function showContextViewForTodo(todo) {
   while (running) {
     const todaySection = await initializeTodaySection();
 
+    // Refresh todo object from current file state
+    const currentTodos = extractTodos(todaySection);
+    let currentTodo = todo;
+    if (todo.todoId) {
+      const found = currentTodos.find(t => t.todoId === todo.todoId);
+      if (found) {
+        currentTodo = found;
+      }
+    }
+
     term.clear();
     term.cyan.bold('  📎 CONTEXT VIEW\n\n');
-    term.gray('  Todo: ').white(todo.text).gray('\n\n');
+    term.gray('  Todo: ').white(currentTodo.text).gray('\n\n');
     term.gray('  ').white('a').gray(': Add Context  ').white('e').gray(': Edit  ').white('d').gray(': Delete  ').white('ESC').gray(': Back to Todos\n\n');
 
-    if (!todo.contextId) {
+    if (!currentTodo.contextId) {
       term.yellow('  No context linked to this todo.\n');
       term.gray('  Press ').white('a').gray(' to add context or ').white('ESC').gray(' to go back.\n');
     } else {
-      const contextText = getContextById(todaySection, todo.contextId);
+      const contextText = getContextById(todaySection, currentTodo.contextId);
 
-      term.yellow(`  [${todo.contextId}]\n`);
+      term.yellow(`  [${currentTodo.contextId}]\n`);
       term.white(`  ${contextText || '(no content)'}\n\n`);
 
       // Show other todos linked to this context
-      const linkedTodos = getTodosReferencingContext(todaySection, todo.contextId);
+      const linkedTodos = getTodosReferencingContext(todaySection, currentTodo.contextId);
       if (linkedTodos.length > 1) {
         term.gray('  Also linked to:\n');
         linkedTodos.forEach(t => {
-          if (t.todoId !== todo.todoId) {
+          if (t.todoId !== currentTodo.todoId) {
             term.gray('    → ').white(t.text).gray('\n');
           }
         });
@@ -174,25 +190,18 @@ async function showContextViewForTodo(todo) {
 
     if (key === 'a' || key === 'A') {
       // Add context
-      if (!todo.contextId) {
-        await addContextToTodoInteractive(todo, todaySection);
-        // Refresh todo object
-        const updatedSection = await initializeTodaySection();
-        const updatedTodos = extractTodos(updatedSection);
-        const updatedTodo = updatedTodos.find(t => t.lineNumber === todo.lineNumber);
-        if (updatedTodo) {
-          todo = updatedTodo;
-        }
+      if (!currentTodo.contextId) {
+        await addContextToTodoInteractive(currentTodo, todaySection);
       }
     } else if (key === 'e' || key === 'E') {
       // Edit context
-      if (todo.contextId) {
-        await editContextInteractive(todo.contextId);
+      if (currentTodo.contextId) {
+        await editContextInteractive(currentTodo.contextId);
       }
     } else if (key === 'd' || key === 'D') {
       // Delete context link
-      if (todo.contextId) {
-        await deleteContextFromTodoInteractive(todo, todaySection);
+      if (currentTodo.contextId) {
+        await deleteContextFromTodoInteractive(currentTodo, todaySection);
         running = false; // Go back after deleting
       }
     } else if (key === 'ESCAPE') {
