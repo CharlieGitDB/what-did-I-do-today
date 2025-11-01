@@ -418,7 +418,7 @@ export function getContextById(sectionContent, contextId) {
       continue;
     }
 
-    if (line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
+    if (inContextSection && line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
       inContextSection = false;
       break;
     }
