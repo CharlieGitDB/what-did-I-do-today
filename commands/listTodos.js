@@ -95,7 +95,7 @@ async function showTodoList() {
       if (todos.length > 0) {
         selectedIndex = Math.min(todos.length - 1, selectedIndex + 1);
       }
-    } else if (key === 'SPACE') {
+    } else if (key === ' ' || key === 'SPACE') {
       // Toggle completion
       if (todos.length > 0 && selectedIndex < todos.length) {
         const todo = todos[selectedIndex];

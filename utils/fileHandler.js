@@ -453,7 +453,8 @@ export function getContextById(sectionContent, contextId) {
     }
   }
 
-  return contextLines.length > 0 ? contextLines.join('\n').replace(/<\/?p>/g, '').trim() : null;
+  // Remove all HTML tags and return cleaned text
+  return contextLines.length > 0 ? contextLines.join('\n').replace(/<[^>]+>/g, '').trim() : null;
 }
 
 /**
@@ -636,7 +637,7 @@ export function getAllContexts(sectionContent) {
         if (currentContextId && currentContextLines.length > 0) {
           contexts.push({
             id: currentContextId,
-            text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
+            text: currentContextLines.join('\n').replace(/<[^>]+>/g, '').trim()
           });
         }
         // Start new context
@@ -650,7 +651,7 @@ export function getAllContexts(sectionContent) {
           if (currentContextId && currentContextLines.length > 0) {
             contexts.push({
               id: currentContextId,
-              text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
+              text: currentContextLines.join('\n').replace(/<[^>]+>/g, '').trim()
             });
           }
           // Start new context
@@ -667,7 +668,7 @@ export function getAllContexts(sectionContent) {
   if (currentContextId && currentContextLines.length > 0) {
     contexts.push({
       id: currentContextId,
-      text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
+      text: currentContextLines.join('\n').replace(/<[^>]+>/g, '').trim()
     });
   }
 
