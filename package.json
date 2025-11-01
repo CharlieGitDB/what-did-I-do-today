@@ -24,6 +24,7 @@
     "cli-table3": "^0.6.5",
     "commander": "^11.1.0",
     "glob": "^11.0.3",
-    "inquirer": "^9.2.12"
+    "inquirer": "^9.2.12",
+    "terminal-kit": "^3.1.2"
   }
 }

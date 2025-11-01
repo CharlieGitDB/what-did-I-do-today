@@ -1,6 +1,5 @@
+import termkit from 'terminal-kit';
 import inquirer from 'inquirer';
-import chalk from 'chalk';
-import Table from 'cli-table3';
 import {
   initializeTodaySection,
   extractTodos,
@@ -12,146 +11,325 @@ import {
   deleteContext,
   idExistsInAnyFile,
   getAllContexts,
-  getTodosReferencingContext
+  getTodosReferencingContext,
+  getNextTodoId
 } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 
+const term = termkit.terminal;
+
 /**
- * Displays the help header
+ * Displays and allows management of todos for today with interactive keyboard controls
+ * @returns {Promise<void>}
  */
-function displayHeader() {
-  console.clear();
-  console.log(chalk.bold.cyan('\n╔═══════════════════════════════════════════════════════════════╗'));
-  console.log(chalk.bold.cyan('║') + chalk.bold.white('              📝  TODO MANAGER  📝                           ') + chalk.bold.cyan('║'));
-  console.log(chalk.bold.cyan('╚═══════════════════════════════════════════════════════════════╝'));
-  console.log();
-  console.log(chalk.gray('  Quick Tips:'));
-  console.log(chalk.gray('  • Use ') + chalk.white('SPACE') + chalk.gray(' to toggle todo completion'));
-  console.log(chalk.gray('  • Use ') + chalk.white('ARROW KEYS') + chalk.gray(' to navigate'));
-  console.log(chalk.gray('  • Use ') + chalk.white('ENTER') + chalk.gray(' to confirm selection'));
-  console.log(chalk.gray('  • Contexts provide additional details for your todos'));
-  console.log();
-  console.log(chalk.gray('─'.repeat(63)));
-  console.log();
+export async function listTodos() {
+  await showTodoTable();
 }
 
 /**
- * Displays todos in a formatted list
- * @param {Array} todos - Array of todo objects
- * @returns {string} Formatted todo list
+ * Shows the interactive todo table
+ * @returns {Promise<void>}
  */
-function displayTodoList(todos) {
-  if (todos.length === 0) {
-    return chalk.yellow('  No todos for today!');
+async function showTodoTable() {
+  while (true) {
+    term.clear();
+
+    const todaySection = await initializeTodaySection();
+    const todos = extractTodos(todaySection);
+
+    if (todos.length === 0) {
+      term.cyan('\n  📝 TODO MANAGER\n\n');
+      term.yellow('  No todos for today!\n');
+      term.gray('  Press ').white('A').gray(' to add a todo, or ').white('ESC').gray(' to exit.\n\n');
+
+      const key = await waitForKey(['a', 'A', 'ESCAPE']);
+      if (key === 'ESCAPE') {
+        term('\n');
+        return;
+      }
+      if (key === 'a' || key === 'A') {
+        await addTodoInteractive();
+        continue;
+      }
+    }
+
+    // Display header
+    term.cyan.bold('\n  📝 TODO MANAGER\n\n');
+    term.gray('  ').white('SPACE').gray(': Toggle  ').white('E').gray(': Edit  ').white('D').gray(': Delete  ').white('A').gray(': Add  ').white('C').gray(': Contexts  ').white('ESC').gray(': Exit\n\n');
+
+    // Prepare table data
+    const tableData = [];
+    tableData.push([
+      term.str.cyan('✓'),
+      term.str.cyan('ID'),
+      term.str.cyan('Todo'),
+      term.str.cyan('Context')
+    ]);
+
+    todos.forEach((todo, idx) => {
+      const checkbox = todo.checked ? term.str.green('✓') : term.str.gray('○');
+      const todoId = todo.todoId || term.str.gray('-');
+      const text = todo.checked ? term.str.gray.dim(todo.text) : term.str.white(todo.text);
+      const context = todo.contextId ? term.str.blue(`📎 ${todo.contextId}`) : term.str.gray('-');
+
+      tableData.push([checkbox, todoId, text, context]);
+    });
+
+    // Display table
+    term.table(tableData, {
+      hasBorder: true,
+      borderChars: 'light',
+      borderAttr: { color: 'gray' },
+      textAttr: { bgColor: 'default' },
+      firstRowTextAttr: { bgColor: 'default' },
+      width: term.width - 4,
+      fit: true
+    });
+
+    term('\n  ').gray('Use ').white('↑↓').gray(' to navigate, then press a key...\n\n');
+
+    // Show selection menu
+    const todoChoices = todos.map((todo, idx) => {
+      const checkbox = todo.checked ? '✓' : '○';
+      const text = todo.checked ? `${todo.text}` : todo.text;
+      const context = todo.contextId ? ` 📎 ${todo.contextId}` : '';
+      return `${checkbox} ${text}${context}`;
+    });
+
+    try {
+      const selectedIndex = await selectFromList(todoChoices);
+
+      if (selectedIndex === -1) {
+        // ESC pressed at selection
+        term('\n');
+        return;
+      }
+
+      // Wait for action key
+      term.gray('\n  Selected: ').white(todoChoices[selectedIndex]).gray('\n  Press ').white('SPACE/E/D/C').gray(' or ').white('ESC').gray(' to go back...\n');
+
+      const actionKey = await waitForKey(['SPACE', 'e', 'E', 'd', 'D', 'c', 'C', 'ESCAPE']);
+
+      if (actionKey === 'ESCAPE') {
+        continue;
+      }
+
+      const selectedTodo = todos[selectedIndex];
+
+      if (actionKey === 'SPACE') {
+        // Toggle completion
+        const updatedSection = updateTodoInSection(todaySection, selectedTodo.lineNumber, !selectedTodo.checked);
+        await replaceTodaySection(updatedSection);
+      } else if (actionKey === 'e' || actionKey === 'E') {
+        // Edit todo
+        await editTodoInteractive(selectedTodo, todaySection);
+      } else if (actionKey === 'd' || actionKey === 'D') {
+        // Delete todo
+        await deleteTodoInteractive(selectedTodo, todaySection);
+      } else if (actionKey === 'c' || actionKey === 'C') {
+        // View contexts
+        await showContextTableForTodo(selectedTodo);
+      }
+
+    } catch (error) {
+      if (error.message === 'ADD_TODO') {
+        await addTodoInteractive();
+      } else if (error.message === 'VIEW_CONTEXTS') {
+        await showAllContextsTable();
+      } else if (error.message === 'EXIT') {
+        term('\n');
+        return;
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+/**
+ * Shows context table for a specific todo
+ * @param {Object} todo - The todo object
+ * @returns {Promise<void>}
+ */
+async function showContextTableForTodo(todo) {
+  if (!todo.contextId) {
+    term.yellow('\n  This todo has no context.\n');
+    term.gray('  Press any key to continue...\n');
+    await term.inputField({ echo: false }).promise;
+    return;
   }
 
-  let output = chalk.bold('  Your Todos:\n\n');
-  todos.forEach((todo, index) => {
-    const checkbox = todo.checked ? chalk.green('✓') : chalk.gray('○');
-    const text = todo.checked ? chalk.gray.strikethrough(todo.text) : chalk.white(todo.text);
-    const context = todo.contextId ? chalk.cyan(` 📎 ${todo.contextId}`) : '';
-    output += `  ${checkbox} ${text}${context}\n`;
-  });
-  return output;
+  const todaySection = await initializeTodaySection();
+  const contextText = getContextById(todaySection, todo.contextId);
+
+  term.clear();
+  term.cyan.bold('\n  📎 CONTEXT VIEW\n\n');
+  term.gray('  Press ').white('ESC').gray(' to go back to todos\n\n');
+
+  // Display context info
+  term('  ').yellow.bold(`Context ID: ${todo.contextId}\n\n`);
+  term('  ').white(contextText || 'No context found').wrap('\n\n');
+
+  // Show which todos reference this context
+  const referencingTodos = getTodosReferencingContext(todaySection, todo.contextId);
+
+  if (referencingTodos.length > 0) {
+    term('  ').cyan('Linked Todos:\n');
+    referencingTodos.forEach(t => {
+      term('    ').green(`→ ${t.todoId}: `).white(t.text).wrap('\n');
+    });
+  }
+
+  term('\n');
+  await waitForKey(['ESCAPE']);
 }
 
 /**
- * Shows the main action menu
- * @returns {Promise<string>} Selected action
+ * Shows all contexts in a table view
+ * @returns {Promise<void>}
  */
-async function showMainMenu() {
-  const { action } = await inquirer.prompt([
+async function showAllContextsTable() {
+  const todaySection = await initializeTodaySection();
+  const contexts = getAllContexts(todaySection);
+
+  term.clear();
+  term.cyan.bold('\n  📊 ALL CONTEXTS\n\n');
+  term.gray('  Press ').white('ESC').gray(' to go back\n\n');
+
+  if (contexts.length === 0) {
+    term.yellow('  No contexts found.\n\n');
+    await waitForKey(['ESCAPE']);
+    return;
+  }
+
+  // Prepare table data
+  const tableData = [];
+  tableData.push([
+    term.str.cyan('ID'),
+    term.str.cyan('Context'),
+    term.str.cyan('Linked Todos')
+  ]);
+
+  contexts.forEach(ctx => {
+    const referencingTodos = getTodosReferencingContext(todaySection, ctx.id);
+    const todoLinks = referencingTodos.length > 0
+      ? referencingTodos.map(t => `→ ${t.todoId}`).join(', ')
+      : '(none)';
+
+    tableData.push([
+      term.str.yellow(ctx.id),
+      term.str.white(ctx.text),
+      term.str.green(todoLinks)
+    ]);
+  });
+
+  // Display table
+  term.table(tableData, {
+    hasBorder: true,
+    borderChars: 'light',
+    borderAttr: { color: 'gray' },
+    textAttr: { bgColor: 'default' },
+    firstRowTextAttr: { bgColor: 'default' },
+    width: term.width - 4,
+    fit: true
+  });
+
+  term('\n');
+  await waitForKey(['ESCAPE']);
+}
+
+/**
+ * Prompts to add a new todo interactively
+ * @returns {Promise<void>}
+ */
+async function addTodoInteractive() {
+  term.grabInput(false);
+  term.hideCursor(false);
+
+  const answers = await inquirer.prompt([
     {
-      type: 'list',
-      name: 'action',
-      message: chalk.bold('What would you like to do?'),
-      pageSize: 10,
-      choices: [
-        { name: '✓  Toggle Todo Completion', value: 'toggle' },
-        { name: '✏️   Edit Todo Text', value: 'edit' },
-        { name: '➕  Add Context to Todo', value: 'add_context' },
-        { name: '📝  Edit Todo Context', value: 'edit_context' },
-        { name: '🗑️   Delete Todo', value: 'delete' },
-        new inquirer.Separator(),
-        { name: '📊  View All Contexts (Table)', value: 'view_contexts_table' },
-        new inquirer.Separator(),
-        { name: chalk.gray('↩   Exit'), value: 'exit' }
-      ]
+      type: 'input',
+      name: 'todoText',
+      message: 'Enter todo text:',
+      validate: (input) => {
+        if (!input.trim()) {
+          return 'Todo cannot be empty';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'confirm',
+      name: 'wantContext',
+      message: 'Add context to this todo?',
+      default: false
+    },
+    {
+      type: 'input',
+      name: 'contextText',
+      message: 'Enter context:',
+      when: (answers) => answers.wantContext,
+      validate: (input) => {
+        if (!input.trim()) {
+          return 'Context cannot be empty';
+        }
+        return true;
+      }
     }
   ]);
-  return action;
+
+  term.hideCursor(true);
+  term.grabInput(true);
+
+  const todaySection = await initializeTodaySection();
+  const todoId = getNextTodoId(todaySection);
+  let contextId = null;
+
+  if (answers.contextText) {
+    contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
+    await addContext(contextId, answers.contextText);
+  }
+
+  // Add todo to file
+  const lines = todaySection.split('\n');
+  let insertIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === '</ul>') {
+      insertIdx = i;
+      break;
+    }
+  }
+
+  if (insertIdx !== -1) {
+    let todoLine;
+    if (contextId) {
+      todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${answers.todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></ac:task-body></ac:task></li>`;
+    } else {
+      todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${answers.todoText}</ac:task-body></ac:task></li>`;
+    }
+
+    lines.splice(insertIdx, 0, todoLine);
+    await replaceTodaySection(lines.join('\n'));
+  }
 }
 
 /**
- * Allows user to toggle todo completion status
- * @param {Array} todos - Array of todo objects
+ * Edits a todo interactively
+ * @param {Object} todo - The todo to edit
  * @param {string} todaySection - Today's section content
  * @returns {Promise<void>}
  */
-async function toggleTodos(todos, todaySection) {
-  const { selectedTodos } = await inquirer.prompt([
-    {
-      type: 'checkbox',
-      name: 'selectedTodos',
-      message: chalk.bold('Select completed todos (SPACE to toggle, ENTER when done):'),
-      pageSize: 15,
-      choices: todos.map((todo, index) => ({
-        name: `${todo.text}${todo.contextId ? chalk.cyan(' 📎') : ''}`,
-        value: index,
-        checked: todo.checked
-      }))
-    }
-  ]);
+async function editTodoInteractive(todo, todaySection) {
+  term.grabInput(false);
+  term.hideCursor(false);
 
-  let updatedSection = todaySection;
-
-  // Update all todos based on selections
-  todos.forEach((todo, index) => {
-    const shouldBeChecked = selectedTodos.includes(index);
-    if (todo.checked !== shouldBeChecked) {
-      updatedSection = updateTodoInSection(updatedSection, todo.lineNumber, shouldBeChecked);
-    }
-  });
-
-  await replaceTodaySection(updatedSection);
-  console.log();
-  console.log(chalk.green('  ✓ Todos updated successfully!'));
-  console.log();
-}
-
-/**
- * Allows user to edit a todo's text
- * @param {Array} todos - Array of todo objects
- * @param {string} todaySection - Today's section content
- * @returns {Promise<void>}
- */
-async function editTodo(todos, todaySection) {
-  const { selectedTodo } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedTodo',
-      message: chalk.bold('Select a todo to edit:'),
-      pageSize: 15,
-      choices: [
-        ...todos.map((todo, index) => ({
-          name: `${todo.checked ? chalk.green('[✓]') : chalk.gray('[○]')} ${todo.text}${todo.contextId ? chalk.cyan(' 📎') : ''}`,
-          value: index
-        })),
-        new inquirer.Separator(),
-        { name: chalk.gray('← Back'), value: -1 }
-      ]
-    }
-  ]);
-
-  if (selectedTodo === -1) return;
-
-  const selectedTodoItem = todos[selectedTodo];
   const { newText } = await inquirer.prompt([
     {
       type: 'input',
       name: 'newText',
       message: 'Enter new todo text:',
-      default: selectedTodoItem.text,
+      default: todo.text,
       validate: (input) => {
         if (!input.trim()) {
           return 'Todo text cannot be empty';
@@ -161,8 +339,11 @@ async function editTodo(todos, todaySection) {
     }
   ]);
 
+  term.hideCursor(true);
+  term.grabInput(true);
+
   const lines = todaySection.split('\n');
-  const line = lines[selectedTodoItem.lineNumber];
+  const line = lines[todo.lineNumber];
 
   if (line) {
     const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
@@ -171,7 +352,7 @@ async function editTodo(todos, todaySection) {
       const status = todoMatch[2];
       const oldText = todoMatch[3];
 
-      // Extract context if present (both old and new format)
+      // Extract context if present
       const anchorMatch = oldText.match(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/);
       const oldContextMatch = oldText.match(/\[context: ([^\]]+)\]$/);
 
@@ -182,383 +363,114 @@ async function editTodo(todos, todaySection) {
         contextPart = ` <a href="#context-${oldContextMatch[1]}" style="color: #0066cc;">📎 ${oldContextMatch[1]}</a>`;
       }
 
-      // Preserve ID if present
       if (todoId) {
-        lines[selectedTodoItem.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
+        lines[todo.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
       } else {
-        lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
+        lines[todo.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
       }
     }
   }
 
   await replaceTodaySection(lines.join('\n'));
-  console.log();
-  console.log(chalk.green('  ✓ Todo updated successfully!'));
-  console.log();
 }
 
 /**
- * Allows user to delete a todo
- * @param {Array} todos - Array of todo objects
+ * Deletes a todo interactively
+ * @param {Object} todo - The todo to delete
  * @param {string} todaySection - Today's section content
  * @returns {Promise<void>}
  */
-async function deleteTodo(todos, todaySection) {
-  const { selectedTodo } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedTodo',
-      message: chalk.bold('Select a todo to delete:'),
-      pageSize: 15,
-      choices: [
-        ...todos.map((todo, index) => ({
-          name: `${todo.checked ? chalk.green('[✓]') : chalk.gray('[○]')} ${todo.text}${todo.contextId ? chalk.cyan(' 📎') : ''}`,
-          value: index
-        })),
-        new inquirer.Separator(),
-        { name: chalk.gray('← Back'), value: -1 }
-      ]
-    }
-  ]);
-
-  if (selectedTodo === -1) return;
+async function deleteTodoInteractive(todo, todaySection) {
+  term.grabInput(false);
+  term.hideCursor(false);
 
   const { confirm } = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'confirm',
-      message: chalk.yellow('Are you sure you want to delete this todo?'),
+      message: 'Are you sure you want to delete this todo?',
       default: false
     }
   ]);
 
-  if (!confirm) return;
+  term.hideCursor(true);
+  term.grabInput(true);
 
-  const lines = todaySection.split('\n');
-  lines.splice(todos[selectedTodo].lineNumber, 1);
-
-  await replaceTodaySection(lines.join('\n'));
-  console.log();
-  console.log(chalk.green('  ✓ Todo deleted successfully!'));
-  console.log();
+  if (confirm) {
+    const lines = todaySection.split('\n');
+    lines.splice(todo.lineNumber, 1);
+    await replaceTodaySection(lines.join('\n'));
+  }
 }
 
 /**
- * Allows user to add context to a todo
- * @param {Array} todos - Array of todo objects
- * @param {string} todaySection - Today's section content
- * @returns {Promise<void>}
+ * Selects an item from a list with arrow keys
+ * @param {Array<string>} choices - List of choices
+ * @returns {Promise<number>} Selected index or -1 for ESC
  */
-async function addContextToTodo(todos, todaySection) {
-  const todosWithoutContext = todos.filter(t => !t.contextId);
+async function selectFromList(choices) {
+  return new Promise((resolve) => {
+    let selectedIndex = 0;
 
-  if (todosWithoutContext.length === 0) {
-    console.log();
-    console.log(chalk.yellow('  All todos already have contexts!'));
-    console.log();
-    return;
-  }
+    const displayMenu = () => {
+      term.moveTo(1, term.height - choices.length - 2);
+      term.eraseDisplayBelow();
 
-  const { selectedTodo } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedTodo',
-      message: chalk.bold('Select a todo to add context:'),
-      pageSize: 15,
-      choices: [
-        ...todos.map((todo, index) => ({
-          name: `${todo.checked ? chalk.green('[✓]') : chalk.gray('[○]')} ${todo.text}${todo.contextId ? chalk.gray(' (has context)') : ''}`,
-          value: index,
-          disabled: todo.contextId ? 'Already has context' : false
-        })),
-        new inquirer.Separator(),
-        { name: chalk.gray('← Back'), value: -1 }
-      ]
-    }
-  ]);
-
-  if (selectedTodo === -1) return;
-
-  const { contextText } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'contextText',
-      message: 'Enter context for this todo:',
-      validate: (input) => {
-        if (!input.trim()) {
-          return 'Context cannot be empty';
+      choices.forEach((choice, idx) => {
+        if (idx === selectedIndex) {
+          term('  ').bgWhite.black(` ${choice} `)('\n');
+        } else {
+          term('  ').gray(choice)('\n');
         }
-        return true;
+      });
+    };
+
+    displayMenu();
+
+    term.grabInput(true);
+    term.hideCursor(true);
+
+    term.on('key', function handleKey(name) {
+      if (name === 'UP') {
+        selectedIndex = Math.max(0, selectedIndex - 1);
+        displayMenu();
+      } else if (name === 'DOWN') {
+        selectedIndex = Math.min(choices.length - 1, selectedIndex + 1);
+        displayMenu();
+      } else if (name === 'ENTER') {
+        term.removeListener('key', handleKey);
+        resolve(selectedIndex);
+      } else if (name === 'ESCAPE') {
+        term.removeListener('key', handleKey);
+        resolve(-1);
+      } else if (name === 'a' || name === 'A') {
+        term.removeListener('key', handleKey);
+        throw new Error('ADD_TODO');
+      } else if (name === 'c' || name === 'C') {
+        term.removeListener('key', handleKey);
+        throw new Error('VIEW_CONTEXTS');
       }
-    }
-  ]);
+    });
+  });
+}
 
-  const newContextId = await generateUniqueThreeWordId(idExistsInAnyFile);
-  await addContext(newContextId, contextText);
+/**
+ * Waits for specific keys to be pressed
+ * @param {Array<string>} validKeys - List of valid key names
+ * @returns {Promise<string>} The key that was pressed
+ */
+async function waitForKey(validKeys) {
+  return new Promise((resolve) => {
+    term.grabInput(true);
+    term.hideCursor(true);
 
-  const lines = todaySection.split('\n');
-  const selectedTodoItem = todos[selectedTodo];
-  const line = lines[selectedTodoItem.lineNumber];
-
-  if (line) {
-    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
-    if (todoMatch) {
-      const todoId = todoMatch[1];
-      const status = todoMatch[2];
-      const text = todoMatch[3];
-
-      // Use anchor link for context
-      const contextLink = `<a href="#context-${newContextId}" style="color: #0066cc;">📎 ${newContextId}</a>`;
-
-      // Preserve ID if present
-      if (todoId) {
-        lines[selectedTodoItem.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text} ${contextLink}</ac:task-body></ac:task></li>`;
+    term.once('key', function(name) {
+      if (validKeys.includes(name)) {
+        resolve(name);
       } else {
-        lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text} ${contextLink}</ac:task-body></ac:task></li>`;
+        // Wait for valid key
+        term.once('key', arguments.callee);
       }
-    }
-  }
-
-  await replaceTodaySection(lines.join('\n'));
-  console.log();
-  console.log(chalk.green('  ✓ Context added successfully! ID: ') + chalk.cyan(newContextId));
-  console.log();
-}
-
-/**
- * Allows user to edit a todo's context
- * @param {Array} todos - Array of todo objects
- * @param {string} todaySection - Today's section content
- * @returns {Promise<void>}
- */
-async function editTodoContext(todos, todaySection) {
-  const todosWithContext = todos.filter(t => t.contextId);
-
-  if (todosWithContext.length === 0) {
-    console.log();
-    console.log(chalk.yellow('  No todos have contexts yet!'));
-    console.log();
-    return;
-  }
-
-  const { selectedTodo } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selectedTodo',
-      message: chalk.bold('Select a todo to edit its context:'),
-      pageSize: 15,
-      choices: [
-        ...todos.map((todo, index) => ({
-          name: `${todo.checked ? chalk.green('[✓]') : chalk.gray('[○]')} ${todo.text}${todo.contextId ? chalk.cyan(` 📎 ${todo.contextId}`) : ''}`,
-          value: index,
-          disabled: !todo.contextId ? 'No context' : false
-        })),
-        new inquirer.Separator(),
-        { name: chalk.gray('← Back'), value: -1 }
-      ]
-    }
-  ]);
-
-  if (selectedTodo === -1) return;
-
-  const selectedTodoItem = todos[selectedTodo];
-  const currentContext = getContextById(todaySection, selectedTodoItem.contextId);
-
-  const { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: 'What would you like to do?',
-      choices: [
-        { name: '👁️   View context', value: 'view' },
-        { name: '✏️   Edit context text', value: 'edit' },
-        { name: '🗑️   Remove context from todo', value: 'remove' },
-        new inquirer.Separator(),
-        { name: chalk.gray('← Back'), value: 'back' }
-      ]
-    }
-  ]);
-
-  if (action === 'back') return;
-
-  if (action === 'view') {
-    console.log();
-    console.log(chalk.cyan.bold(`  Context [${selectedTodoItem.contextId}]:`));
-    console.log(chalk.white(`  ${currentContext || 'No context found'}`));
-    console.log();
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: 'Press ENTER to continue...'
-      }
-    ]);
-  } else if (action === 'edit') {
-    const { newContextText } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'newContextText',
-        message: 'Enter new context:',
-        default: currentContext || '',
-        validate: (input) => {
-          if (!input.trim()) {
-            return 'Context cannot be empty';
-          }
-          return true;
-        }
-      }
-    ]);
-
-    await updateContext(selectedTodoItem.contextId, newContextText);
-    console.log();
-    console.log(chalk.green('  ✓ Context updated successfully!'));
-    console.log();
-  } else if (action === 'remove') {
-    const { confirm } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirm',
-        message: chalk.yellow('Remove context from this todo? (Context will still exist for other todos)'),
-        default: false
-      }
-    ]);
-
-    if (confirm) {
-      const lines = todaySection.split('\n');
-      const line = lines[selectedTodoItem.lineNumber];
-
-      if (line) {
-        const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
-        if (todoMatch) {
-          const todoId = todoMatch[1];
-          const status = todoMatch[2];
-          let text = todoMatch[3];
-
-          // Remove context reference (both old and new format)
-          text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/, '').trim();
-          text = text.replace(/\s*\[context: [^\]]+\]$/, '').trim();
-
-          // Preserve ID if present
-          if (todoId) {
-            lines[selectedTodoItem.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
-          } else {
-            lines[selectedTodoItem.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
-          }
-        }
-      }
-
-      await replaceTodaySection(lines.join('\n'));
-      console.log();
-      console.log(chalk.green('  ✓ Context removed from todo!'));
-      console.log();
-    }
-  }
-}
-
-/**
- * Displays all contexts in a table format with bidirectional links
- * @param {string} todaySection - Today's section content
- * @returns {Promise<void>}
- */
-async function viewContextsTable(todaySection) {
-  const contexts = getAllContexts(todaySection);
-
-  if (contexts.length === 0) {
-    console.log();
-    console.log(chalk.yellow('  No contexts found!'));
-    console.log();
-    return;
-  }
-
-  console.log();
-  console.log(chalk.bold.cyan('  📊 All Contexts with Backlinks\n'));
-
-  const table = new Table({
-    head: [chalk.cyan('ID'), chalk.cyan('Context'), chalk.cyan('Linked Todos')],
-    colWidths: [25, 35, 25],
-    wordWrap: true,
-    style: {
-      head: [],
-      border: ['gray']
-    }
+    });
   });
-
-  contexts.forEach(ctx => {
-    // Get todos that reference this context
-    const referencingTodos = getTodosReferencingContext(todaySection, ctx.id);
-    const todoLinks = referencingTodos.length > 0
-      ? referencingTodos.map(t => `→ ${t.todoId}`).join('\n')
-      : chalk.gray('(none)');
-
-    table.push([
-      chalk.yellow(ctx.id),
-      chalk.white(ctx.text),
-      chalk.green(todoLinks)
-    ]);
-  });
-
-  console.log(table.toString());
-  console.log();
-
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'continue',
-      message: 'Press ENTER to continue...'
-    }
-  ]);
-}
-
-/**
- * Displays and allows management of todos for today
- * @returns {Promise<void>}
- */
-export async function listTodos() {
-  let running = true;
-
-  while (running) {
-    const todaySection = await initializeTodaySection();
-    const todos = extractTodos(todaySection);
-
-    displayHeader();
-
-    if (todos.length === 0) {
-      console.log(chalk.yellow('  No todos for today!'));
-      console.log(chalk.gray('  Use ') + chalk.white('wdidt add "your todo"') + chalk.gray(' to create one.'));
-      console.log();
-      return;
-    }
-
-    console.log(displayTodoList(todos));
-    console.log();
-
-    const action = await showMainMenu();
-
-    switch (action) {
-      case 'toggle':
-        await toggleTodos(todos, todaySection);
-        break;
-      case 'edit':
-        await editTodo(todos, todaySection);
-        break;
-      case 'add_context':
-        await addContextToTodo(todos, todaySection);
-        break;
-      case 'edit_context':
-        await editTodoContext(todos, todaySection);
-        break;
-      case 'delete':
-        await deleteTodo(todos, todaySection);
-        break;
-      case 'view_contexts_table':
-        await viewContextsTable(todaySection);
-        break;
-      case 'exit':
-        running = false;
-        console.log();
-        console.log(chalk.green('  ✓ All done! Have a great day!'));
-        console.log();
-        break;
-    }
-  }
 }
