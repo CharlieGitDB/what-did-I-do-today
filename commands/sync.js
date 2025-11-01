@@ -3,7 +3,6 @@ import chalk from 'chalk';
 import { getConfig } from '../utils/config.js';
 import { getAllMonthlyNotesFiles } from '../utils/fileHandler.js';
 import { ConfluenceClient } from '../utils/confluenceClient.js';
-import { convertMarkdownFile } from '../utils/markdownToConfluence.js';
 import path from 'path';
 
 /**
@@ -44,17 +43,17 @@ export async function syncToConfluence() {
 
     // Sync each file
     for (const filePath of files) {
-      const fileName = path.basename(filePath, '.md');
+      const fileName = path.basename(filePath, '.html');
       const content = fs.readFileSync(filePath, 'utf-8');
 
-      // Extract the month/year from content (first line should be # Month Year)
+      // Extract the month/year from content (first line should be <h1>Month Year</h1>)
       const firstLine = content.split('\n')[0];
-      const titleMatch = firstLine.match(/^#\s+(.+)$/);
+      const titleMatch = firstLine.match(/^<h1>(.+)<\/h1>$/);
       const pageTitle = titleMatch ? titleMatch[1] : fileName;
 
       try {
-        // Convert markdown to Confluence format
-        const confluenceContent = convertMarkdownFile(content);
+        // Files are already in Confluence XHTML format, use content directly
+        const confluenceContent = content;
 
         // Create or update page
         const result = await client.createOrUpdatePage(

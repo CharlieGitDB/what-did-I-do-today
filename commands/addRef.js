@@ -29,7 +29,7 @@ export async function addRef(text) {
   }
 
   const refId = await generateUniqueThreeWordId(idExistsInAnyFile);
-  const formattedContent = `#ref [${refId}]\n${content}\n#/ref`;
+  const formattedContent = `<ac:structured-macro ac:name="code" data-ref-id="${refId}"><ac:parameter ac:name="title">[${refId}]</ac:parameter><ac:plain-text-body><![CDATA[${content}]]></ac:plain-text-body></ac:structured-macro>`;
   await addContentToSection('References', formattedContent);
 
   console.log(chalk.green('✓') + ` Reference saved with ID: ${chalk.cyan(refId)}`);

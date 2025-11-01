@@ -27,7 +27,7 @@ export async function addNote(text) {
     content = answers.content;
   }
 
-  const formattedContent = `${content}`;
+  const formattedContent = `<p>${content}</p>`;
   await addContentToSection('Notes', formattedContent);
 
   console.log(chalk.green('✓') + ' Note added!');

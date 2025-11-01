@@ -46,7 +46,7 @@ export function getMonthYearDisplay() {
 export async function getNotesFilePath() {
   const config = await getConfig();
   const monthString = getCurrentMonthString();
-  return path.join(config.notesDirectory, `${monthString}-notes.md`);
+  return path.join(config.notesDirectory, `${monthString}-notes.html`);
 }
 
 /**
@@ -80,7 +80,7 @@ export async function readNotesFile() {
 
   if (!fs.existsSync(notesFile)) {
     // Create new monthly file with header
-    const monthYearHeader = `# ${getMonthYearDisplay()}\n\n`;
+    const monthYearHeader = `<h1>${getMonthYearDisplay()}</h1>\n\n`;
     await writeNotesFile(monthYearHeader);
     return monthYearHeader;
   }
@@ -106,7 +106,7 @@ export async function writeNotesFile(content) {
  */
 export function getTodaySection(content) {
   const today = getTodayString();
-  const todayHeaderRegex = new RegExp(`^## ${today.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm');
+  const todayHeaderRegex = new RegExp(`^<h2>${today.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</h2>$`, 'm');
 
   if (!todayHeaderRegex.test(content)) {
     return null;
@@ -117,9 +117,9 @@ export function getTodaySection(content) {
   let endIdx = lines.length;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === `## ${today}`) {
+    if (lines[i] === `<h2>${today}</h2>`) {
       startIdx = i;
-    } else if (startIdx !== -1 && lines[i].startsWith('## ') && i > startIdx) {
+    } else if (startIdx !== -1 && lines[i].startsWith('<h2>') && i > startIdx) {
       endIdx = i;
       break;
     }
@@ -145,13 +145,13 @@ export async function initializeTodaySection() {
   const todaySection = getTodaySection(content);
 
   if (!todaySection) {
-    const newSection = `## ${today}\n\n### Todos\n\n### Context\n\n### References\n\n### Notes\n\n`;
+    const newSection = `<h2>${today}</h2>\n\n<h3>Todos</h3>\n<ul>\n</ul>\n\n<h3>Context</h3>\n\n<h3>References</h3>\n\n<h3>Notes</h3>\n<p></p>\n\n`;
 
     // Get the monthly header
-    const monthHeader = `# ${getMonthYearDisplay()}\n\n`;
+    const monthHeader = `<h1>${getMonthYearDisplay()}</h1>\n\n`;
 
     // Check if content already has the monthly header
-    const hasMonthHeader = content.startsWith(monthHeader) || content.startsWith(`# ${getMonthYearDisplay()}`);
+    const hasMonthHeader = content.startsWith(monthHeader) || content.startsWith(`<h1>${getMonthYearDisplay()}</h1>`);
 
     if (content.trim() && hasMonthHeader) {
       // Append to existing monthly file
@@ -183,20 +183,22 @@ export function extractTodos(sectionContent) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '### Todos') {
+    if (line === '<h3>Todos</h3>') {
       inTodoSection = true;
       continue;
     }
 
-    if (line.startsWith('### ') && line !== '### Todos') {
+    if (line.startsWith('<h3>') && line !== '<h3>Todos</h3>') {
       inTodoSection = false;
     }
 
     if (inTodoSection && line.trim()) {
-      const todoMatch = line.match(/^- \[([ x])\] (.+)$/);
+      // Match Confluence task format: <li><ac:task><ac:task-status>complete|incomplete</ac:task-status><ac:task-body>...</ac:task-body></ac:task></li>
+      const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
       if (todoMatch) {
         let text = todoMatch[2];
         let contextId = null;
+        const checked = todoMatch[1] === 'complete';
 
         // Check if there's a context ID in the format [context: id]
         const contextMatch = text.match(/\[context: ([^\]]+)\]$/);
@@ -207,7 +209,7 @@ export function extractTodos(sectionContent) {
         }
 
         todos.push({
-          checked: todoMatch[1] === 'x',
+          checked: checked,
           text: text,
           lineNumber: i,
           contextId: contextId
@@ -231,9 +233,10 @@ export function updateTodoInSection(sectionContent, lineNumber, checked) {
   const line = lines[lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/^- \[([ x])\] (.+)$/);
+    const todoMatch = line.match(/<li><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
     if (todoMatch) {
-      lines[lineNumber] = `- [${checked ? 'x' : ' '}] ${todoMatch[2]}`;
+      const status = checked ? 'complete' : 'incomplete';
+      lines[lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${todoMatch[2]}</ac:task-body></ac:task></li>`;
     }
   }
 
@@ -281,16 +284,16 @@ export async function addContentToSection(sectionName, content) {
   let nextSectionIdx = lines.length;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === `### ${sectionName}`) {
+    if (lines[i] === `<h3>${sectionName}</h3>`) {
       sectionIdx = i;
-    } else if (sectionIdx !== -1 && lines[i].startsWith('### ')) {
+    } else if (sectionIdx !== -1 && lines[i].startsWith('<h3>')) {
       nextSectionIdx = i;
       break;
     }
   }
 
   if (sectionIdx === -1) {
-    lines.push(`### ${sectionName}`);
+    lines.push(`<h3>${sectionName}</h3>`);
     lines.push('');
     lines.push(content);
     lines.push('');
@@ -322,7 +325,7 @@ export async function addContentToSection(sectionName, content) {
  * @returns {Promise<void>}
  */
 export async function addContext(contextId, contextText) {
-  const formattedContent = `**[${contextId}]**\n${contextText}`;
+  const formattedContent = `<p><strong>[${contextId}]</strong></p>\n<p>${contextText}</p>`;
   await addContentToSection('Context', formattedContent);
 }
 
@@ -341,25 +344,25 @@ export function getContextById(sectionContent, contextId) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '### Context') {
+    if (line === '<h3>Context</h3>') {
       inContextSection = true;
       continue;
     }
 
-    if (line.startsWith('### ') && line !== '### Context') {
+    if (line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
       if (foundContext) break;
       inContextSection = false;
     }
 
     if (inContextSection) {
-      if (line === `**[${contextId}]**`) {
+      if (line === `<p><strong>[${contextId}]</strong></p>`) {
         foundContext = true;
         continue;
       }
 
       if (foundContext) {
         // Check if we hit another context ID
-        if (line.match(/^\*\*\[.+\]\*\*$/)) {
+        if (line.match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
           break;
         }
         if (line.trim()) {
@@ -389,12 +392,12 @@ export async function updateContext(contextId, newContextText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '### Context') {
+    if (line === '<h3>Context</h3>') {
       inContextSection = true;
       continue;
     }
 
-    if (line.startsWith('### ') && line !== '### Context') {
+    if (line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
       if (contextStartIdx !== -1) {
         contextEndIdx = i;
         break;
@@ -403,9 +406,9 @@ export async function updateContext(contextId, newContextText) {
     }
 
     if (inContextSection) {
-      if (line === `**[${contextId}]**`) {
+      if (line === `<p><strong>[${contextId}]</strong></p>`) {
         contextStartIdx = i;
-      } else if (contextStartIdx !== -1 && line.match(/^\*\*\[.+\]\*\*$/)) {
+      } else if (contextStartIdx !== -1 && line.match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
         contextEndIdx = i;
         break;
       }
@@ -422,7 +425,7 @@ export async function updateContext(contextId, newContextText) {
 
   // Remove old context lines (excluding the ID line)
   const linesToRemove = contextEndIdx - contextStartIdx - 1;
-  lines.splice(contextStartIdx + 1, linesToRemove, newContextText);
+  lines.splice(contextStartIdx + 1, linesToRemove, `<p>${newContextText}</p>`);
 
   await replaceTodaySection(lines.join('\n'));
 }
@@ -443,12 +446,12 @@ export async function deleteContext(contextId) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line === '### Context') {
+    if (line === '<h3>Context</h3>') {
       inContextSection = true;
       continue;
     }
 
-    if (line.startsWith('### ') && line !== '### Context') {
+    if (line.startsWith('<h3>') && line !== '<h3>Context</h3>') {
       if (contextStartIdx !== -1) {
         contextEndIdx = i;
         break;
@@ -457,9 +460,9 @@ export async function deleteContext(contextId) {
     }
 
     if (inContextSection) {
-      if (line === `**[${contextId}]**`) {
+      if (line === `<p><strong>[${contextId}]</strong></p>`) {
         contextStartIdx = i;
-      } else if (contextStartIdx !== -1 && line.match(/^\*\*\[.+\]\*\*$/)) {
+      } else if (contextStartIdx !== -1 && line.match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
         contextEndIdx = i;
         break;
       }
@@ -473,7 +476,7 @@ export async function deleteContext(contextId) {
   if (contextEndIdx === -1) {
     // Find the next non-empty line or end
     for (let i = contextStartIdx + 1; i < lines.length; i++) {
-      if (lines[i].startsWith('### ') || (lines[i].trim() && lines[i].match(/^\*\*\[.+\]\*\*$/))) {
+      if (lines[i].startsWith('<h3>') || (lines[i].trim() && lines[i].match(/<p><strong>\[.+\]<\/strong><\/p>/))) {
         contextEndIdx = i;
         break;
       }
@@ -495,7 +498,7 @@ export async function deleteContext(contextId) {
  */
 export async function getAllMonthlyNotesFiles() {
   const config = await getConfig();
-  const pattern = path.join(config.notesDirectory, '*-notes.md').replace(/\\/g, '/');
+  const pattern = path.join(config.notesDirectory, '*-notes.html').replace(/\\/g, '/');
   const files = await glob(pattern);
   return files;
 }
@@ -512,12 +515,12 @@ export async function idExistsInAnyFile(id) {
     if (fs.existsSync(file)) {
       const content = fs.readFileSync(file, 'utf-8');
 
-      // Check for context IDs: **[id]** or [context: id]
-      const contextRegex1 = new RegExp(`\\*\\*\\[${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\*\\*`);
+      // Check for context IDs: <p><strong>[id]</strong></p> or [context: id]
+      const contextRegex1 = new RegExp(`<p><strong>\\[${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]</strong></p>`);
       const contextRegex2 = new RegExp(`\\[context: ${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`);
 
-      // Check for reference IDs: #ref [id]
-      const refRegex = new RegExp(`#ref \\[${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`);
+      // Check for reference IDs: <ac:structured-macro ... data-ref-id="id"
+      const refRegex = new RegExp(`data-ref-id="${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`);
 
       if (contextRegex1.test(content) || contextRegex2.test(content) || refRegex.test(content)) {
         return true;

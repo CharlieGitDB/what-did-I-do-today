@@ -72,38 +72,40 @@ export async function addTodo(text, contextText) {
   const lines = todaySection.split('\n');
 
   let todoSectionIdx = -1;
+  let ulIdx = -1;
   let insertIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === '### Todos') {
+    if (lines[i] === '<h3>Todos</h3>') {
       todoSectionIdx = i;
-    } else if (todoSectionIdx !== -1 && lines[i].startsWith('### ')) {
+      continue;
+    }
+
+    if (todoSectionIdx !== -1 && ulIdx === -1 && lines[i] === '<ul>') {
+      ulIdx = i;
+      continue;
+    }
+
+    if (todoSectionIdx !== -1 && lines[i] === '</ul>') {
       insertIdx = i;
+      break;
+    }
+
+    if (todoSectionIdx !== -1 && lines[i].startsWith('<h3>') && lines[i] !== '<h3>Todos</h3>') {
       break;
     }
   }
 
-  if (insertIdx === -1) {
-    insertIdx = lines.length;
-  }
-
-  // Find last todo or section header
-  let lastTodoIdx = todoSectionIdx + 1;
-  for (let i = todoSectionIdx + 1; i < insertIdx; i++) {
-    if (lines[i].trim()) {
-      lastTodoIdx = i + 1;
-    }
+  if (insertIdx === -1 || ulIdx === -1) {
+    // No ul found, shouldn't happen with our structure but handle it
+    insertIdx = todoSectionIdx + 2;
   }
 
   const todoLine = contextId
-    ? `- [ ] ${todoText} [context: ${contextId}]`
-    : `- [ ] ${todoText}`;
+    ? `<li><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText} [context: ${contextId}]</ac:task-body></ac:task></li>`
+    : `<li><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText}</ac:task-body></ac:task></li>`;
 
-  if (lastTodoIdx === todoSectionIdx + 1 && !lines[lastTodoIdx]?.trim()) {
-    lines.splice(lastTodoIdx, 0, todoLine);
-  } else {
-    lines.splice(lastTodoIdx, 0, todoLine);
-  }
+  lines.splice(insertIdx, 0, todoLine);
 
   await replaceTodaySection(lines.join('\n'));
 
