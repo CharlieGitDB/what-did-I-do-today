@@ -52,13 +52,19 @@ async function showTodoList() {
       // Render todo list
       todos.forEach((todo, idx) => {
         const checkbox = todo.checked ? '[x]' : '[ ]';
-        const text = todo.checked ? term.str.gray.dim(todo.text) : term.str.white(todo.text);
-        const contextHint = todo.contextId ? term.str.blue(` 📎`) : '';
 
         if (idx === selectedIndex) {
-          term.bgWhite.black(`  ${checkbox} ${text}${contextHint}  `).white('\n');
+          // Selected item - inverted colors
+          term.bgWhite.black(`  ${checkbox} ${todo.text}`);
+          if (todo.contextId) term.bgWhite.blue(' 📎');
+          term.bgWhite.black('  ').white('\n');
         } else {
-          term.gray(`  ${checkbox} `).white(todo.checked ? term.str.gray.dim(todo.text) : todo.text);
+          // Unselected item
+          if (todo.checked) {
+            term.gray(`  ${checkbox} `).gray.dim(todo.text);
+          } else {
+            term.gray(`  ${checkbox} `).white(todo.text);
+          }
           if (todo.contextId) term.blue(' 📎');
           term('\n');
         }
