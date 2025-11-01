@@ -18,7 +18,24 @@ const program = new Command();
 program
   .name('wdidt')
   .description('What Did I Do Today - A personal daily notes CLI')
-  .version('1.0.0');
+  .version('1.0.0')
+  .argument('[text...]', 'Todo text (if no subcommand, adds a todo)')
+  .option('-c, --context <text>', 'Context for the todo')
+  .action((text, options) => {
+    // Default action: add a todo
+    if (text && text.length > 0) {
+      // Check if last argument looks like context (if no --context flag)
+      // wdidt "todo" "context" - first arg is todo, second is context
+      if (!options.context && text.length === 2) {
+        addTodo(text[0], text[1]);
+      } else {
+        // wdidt todo text here --context context
+        addTodo(text.join(' '), options.context);
+      }
+    } else {
+      addTodo('', options.context);
+    }
+  });
 
 program
   .command('add')
@@ -26,7 +43,12 @@ program
   .argument('[text...]', 'Todo text (optional, will prompt if not provided)')
   .option('-c, --context <text>', 'Context for the todo')
   .action((text, options) => {
-    addTodo(text.join(' '), options.context);
+    // Check if we have exactly 2 arguments and no --context flag
+    if (!options.context && text.length === 2) {
+      addTodo(text[0], text[1]);
+    } else {
+      addTodo(text.join(' '), options.context);
+    }
   });
 
 program
