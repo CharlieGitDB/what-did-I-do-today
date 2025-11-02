@@ -52,11 +52,13 @@ async function showTodoList() {
       // Render todo list
       todos.forEach((todo, idx) => {
         const checkbox = todo.checked ? '[x]' : '[ ]';
+        const contextCount = todo.contextIds.length;
+        const contextIndicator = contextCount > 0 ? ` 📎${contextCount > 1 ? contextCount : ''}` : '';
 
         if (idx === selectedIndex) {
           // Selected item - inverted colors
           term.bgWhite.black(`  ${checkbox} ${todo.text}`);
-          if (todo.contextId) term.bgWhite.blue(' 📎');
+          if (contextCount > 0) term.bgWhite.blue(contextIndicator);
           term.bgWhite.black('  ').white('\n');
         } else {
           // Unselected item
@@ -65,7 +67,7 @@ async function showTodoList() {
           } else {
             term.gray(`  ${checkbox} `).white(todo.text);
           }
-          if (todo.contextId) term.blue(' 📎');
+          if (contextCount > 0) term.blue(contextIndicator);
           term('\n');
         }
       });
@@ -147,6 +149,7 @@ async function showTodoList() {
  */
 async function showContextViewForTodo(todo) {
   let running = true;
+  let selectedContextIndex = 0;
 
   while (running) {
     const todaySection = await initializeTodaySection();
@@ -164,26 +167,49 @@ async function showContextViewForTodo(todo) {
     term.clear();
     term.cyan.bold('  📎 CONTEXT VIEW\n\n');
     term.gray('  Todo: ').white(currentTodo.text).gray('\n\n');
-    term.gray('  ').white('a').gray(': Add Context  ').white('e').gray(': Edit  ').white('d').gray(': Delete  ').white('ESC').gray(': Back to Todos\n\n');
+    term.gray('  ').white('a').gray(': Add Context  ').white('e').gray(': Edit  ').white('d').gray(': Delete  ').white('↑↓').gray(': Navigate  ').white('ESC').gray(': Back\n\n');
 
-    if (!currentTodo.contextId) {
-      term.yellow('  No context linked to this todo.\n');
+    if (currentTodo.contextIds.length === 0) {
+      term.yellow('  No contexts linked to this todo.\n');
       term.gray('  Press ').white('a').gray(' to add context or ').white('ESC').gray(' to go back.\n');
     } else {
-      const contextText = getContextById(todaySection, currentTodo.contextId);
+      term.gray(`  Linked contexts (${currentTodo.contextIds.length}):\n\n`);
 
-      term.yellow(`  [${currentTodo.contextId}]\n`);
-      term.white(`  ${contextText || '(no content)'}\n\n`);
+      // Show all contexts
+      currentTodo.contextIds.forEach((contextId, idx) => {
+        const contextText = getContextById(todaySection, contextId);
+        const isSelected = idx === selectedContextIndex;
 
-      // Show other todos linked to this context
-      const linkedTodos = getTodosReferencingContext(todaySection, currentTodo.contextId);
-      if (linkedTodos.length > 1) {
-        term.gray('  Also linked to:\n');
-        linkedTodos.forEach(t => {
-          if (t.todoId !== currentTodo.todoId) {
-            term.gray('    → ').white(t.text).gray('\n');
+        if (isSelected) {
+          term.bgWhite.black(`  → [${contextId}]  `).white('\n');
+          term.bgWhite.black(`    ${contextText || '(no content)'}  `).white('\n\n');
+        } else {
+          term.gray(`    [${contextId}]\n`);
+          term.gray(`    ${contextText || '(no content)'}\n\n`);
+        }
+
+        // Show other todos linked to this context
+        const linkedTodos = getTodosReferencingContext(todaySection, contextId);
+        if (linkedTodos.length > 1) {
+          const prefix = isSelected ? '  ' : '  ';
+          const color = isSelected ? term.bgWhite.gray : term.gray.dim;
+          color(`${prefix}  Also linked to: `);
+          const otherTodos = linkedTodos.filter(t => t.todoId !== currentTodo.todoId);
+          color(otherTodos.map(t => t.text).join(', '));
+          if (isSelected) {
+            term.white('\n\n');
+          } else {
+            term('\n\n');
           }
-        });
+        }
+      });
+
+      // Ensure selectedContextIndex is valid
+      if (selectedContextIndex >= currentTodo.contextIds.length) {
+        selectedContextIndex = currentTodo.contextIds.length - 1;
+      }
+      if (selectedContextIndex < 0) {
+        selectedContextIndex = 0;
       }
     }
 
@@ -194,22 +220,23 @@ async function showContextViewForTodo(todo) {
       term.once('key', (name) => resolve(name));
     });
 
-    if (key === 'a' || key === 'A') {
-      // Add context
-      if (!currentTodo.contextId) {
-        await addContextToTodoInteractive(currentTodo, todaySection);
-      } else {
-        // Show message that context already exists
-        term.red('\n  This todo already has a context. Use ').white('e').red(' to edit or ').white('d').red(' to delete it first.\n');
-        term.gray('  Press any key to continue...');
-        await new Promise((resolve) => {
-          term.once('key', () => resolve());
-        });
+    if (key === 'UP' || key === 'k') {
+      if (currentTodo.contextIds.length > 0) {
+        selectedContextIndex = Math.max(0, selectedContextIndex - 1);
       }
+    } else if (key === 'DOWN' || key === 'j') {
+      if (currentTodo.contextIds.length > 0) {
+        selectedContextIndex = Math.min(currentTodo.contextIds.length - 1, selectedContextIndex + 1);
+      }
+    } else if (key === 'a' || key === 'A') {
+      // Add context - now always available
+      await addContextToTodoInteractive(currentTodo, todaySection);
+      selectedContextIndex = currentTodo.contextIds.length; // Select the newly added context
     } else if (key === 'e' || key === 'E') {
       // Edit context
-      if (currentTodo.contextId) {
-        await editContextInteractive(currentTodo.contextId);
+      if (currentTodo.contextIds.length > 0) {
+        const selectedContextId = currentTodo.contextIds[selectedContextIndex];
+        await editContextInteractive(selectedContextId);
       } else {
         // Show message that no context exists
         term.red('\n  This todo has no context to edit. Use ').white('a').red(' to add a context first.\n');
@@ -220,9 +247,13 @@ async function showContextViewForTodo(todo) {
       }
     } else if (key === 'd' || key === 'D') {
       // Delete context link
-      if (currentTodo.contextId) {
-        await deleteContextFromTodoInteractive(currentTodo, todaySection);
-        running = false; // Go back after deleting
+      if (currentTodo.contextIds.length > 0) {
+        const selectedContextId = currentTodo.contextIds[selectedContextIndex];
+        await deleteContextFromTodoInteractive(currentTodo, todaySection, selectedContextId);
+        // Adjust selection after deletion
+        if (selectedContextIndex >= currentTodo.contextIds.length - 1) {
+          selectedContextIndex = Math.max(0, currentTodo.contextIds.length - 2);
+        }
       } else {
         // Show message that no context exists
         term.red('\n  This todo has no context to delete.\n');
@@ -352,16 +383,22 @@ async function editTodoInteractive(todo, todaySection) {
       const status = todoMatch[2];
       const oldText = todoMatch[3];
 
-      // Extract context if present
-      const anchorMatch = oldText.match(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/);
-      const oldContextMatch = oldText.match(/\[context: ([^\]]+)\]$/);
+      // Extract all context links to preserve them
+      const contextLinks = [];
 
-      let contextPart = '';
-      if (anchorMatch) {
-        contextPart = ` <a href="#context-${anchorMatch[1]}" style="color: #0066cc;">📎 ${anchorMatch[1]}</a>`;
-      } else if (oldContextMatch) {
-        contextPart = ` <a href="#context-${oldContextMatch[1]}" style="color: #0066cc;">📎 ${oldContextMatch[1]}</a>`;
+      // Extract new format anchors
+      const anchorMatches = oldText.matchAll(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/g);
+      for (const match of anchorMatches) {
+        contextLinks.push(` <a href="#context-${match[1]}" style="color: #0066cc;">📎 ${match[1]}</a>`);
       }
+
+      // Extract old format contexts
+      const oldContextMatches = oldText.matchAll(/\[context: ([^\]]+)\]/g);
+      for (const match of oldContextMatches) {
+        contextLinks.push(` <a href="#context-${match[1]}" style="color: #0066cc;">📎 ${match[1]}</a>`);
+      }
+
+      const contextPart = contextLinks.join('');
 
       if (todoId) {
         lines[todo.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
@@ -455,7 +492,7 @@ async function addContextToTodoInteractive(todo, todaySection) {
   }
 
   await replaceTodaySection(lines.join('\n'));
-  todo.contextId = contextId; // Update the todo object
+  // Context will be re-extracted on next loop iteration
 }
 
 /**
@@ -495,9 +532,10 @@ async function editContextInteractive(contextId) {
  * Deletes context link from a todo
  * @param {Object} todo - The todo object
  * @param {string} todaySection - Today's section content
+ * @param {string} contextId - The specific context ID to remove
  * @returns {Promise<void>}
  */
-async function deleteContextFromTodoInteractive(todo, todaySection) {
+async function deleteContextFromTodoInteractive(todo, todaySection, contextId) {
   term.grabInput(false);
   term.hideCursor(false);
 
@@ -505,7 +543,7 @@ async function deleteContextFromTodoInteractive(todo, todaySection) {
     {
       type: 'confirm',
       name: 'confirm',
-      message: 'Remove context link from this todo?',
+      message: `Remove context [${contextId}] from this todo?`,
       default: false
     }
   ]);
@@ -524,9 +562,10 @@ async function deleteContextFromTodoInteractive(todo, todaySection) {
         const status = todoMatch[2];
         let text = todoMatch[3];
 
-        // Remove context link
-        text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/, '').trim();
-        text = text.replace(/\s*\[context: [^\]]+\]$/, '').trim();
+        // Remove only the specific context link
+        const escapedContextId = contextId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        text = text.replace(new RegExp(`\\s*<a href="#context-${escapedContextId}"[^>]*>📎 [^<]+<\/a>`, 'g'), '').trim();
+        text = text.replace(new RegExp(`\\s*\\[context: ${escapedContextId}\\]`, 'g'), '').trim();
 
         if (todoId) {
           lines[todo.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;

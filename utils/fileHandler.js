@@ -8,7 +8,7 @@ import { glob } from 'glob';
  * @property {boolean} checked - Whether the todo is checked
  * @property {string} text - The todo text
  * @property {number} lineNumber - The line number in the section
- * @property {string|null} contextId - The context ID if it exists
+ * @property {string[]} contextIds - Array of context IDs linked to this todo
  */
 
 /**
@@ -198,28 +198,30 @@ export function extractTodos(sectionContent) {
       if (todoMatch) {
         const todoId = todoMatch[1] || null;
         let text = todoMatch[3];
-        let contextId = null;
+        const contextIds = [];
         const checked = todoMatch[2] === 'complete';
 
-        // Check if there's a context link or old-style reference
-        const anchorMatch = text.match(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/);
-        const oldContextMatch = text.match(/\[context: ([^\]]+)\]$/);
-
-        if (anchorMatch) {
-          contextId = anchorMatch[1];
-          // Remove the anchor tag from the text
-          text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/, '').trim();
-        } else if (oldContextMatch) {
-          contextId = oldContextMatch[1];
-          // Remove the old context part from the text
-          text = text.replace(/\s*\[context: [^\]]+\]$/, '').trim();
+        // Extract all context links (new format)
+        const anchorMatches = text.matchAll(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/g);
+        for (const match of anchorMatches) {
+          contextIds.push(match[1]);
         }
+
+        // Extract old-style context references
+        const oldContextMatches = text.matchAll(/\[context: ([^\]]+)\]/g);
+        for (const match of oldContextMatches) {
+          contextIds.push(match[1]);
+        }
+
+        // Remove all context links from the text
+        text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/g, '').trim();
+        text = text.replace(/\s*\[context: [^\]]+\]/g, '').trim();
 
         todos.push({
           checked: checked,
           text: text,
           lineNumber: i,
-          contextId: contextId,
+          contextIds: contextIds,
           todoId: todoId
         });
       }
@@ -274,7 +276,7 @@ export function getNextTodoId(sectionContent) {
 export function getTodosReferencingContext(sectionContent, contextId) {
   const todos = extractTodos(sectionContent);
   return todos
-    .filter(todo => todo.contextId === contextId && todo.todoId)
+    .filter(todo => todo.contextIds.includes(contextId) && todo.todoId)
     .map(todo => ({
       todoId: todo.todoId,
       text: todo.text
