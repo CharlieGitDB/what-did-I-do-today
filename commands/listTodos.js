@@ -198,17 +198,38 @@ async function showContextViewForTodo(todo) {
       // Add context
       if (!currentTodo.contextId) {
         await addContextToTodoInteractive(currentTodo, todaySection);
+      } else {
+        // Show message that context already exists
+        term.red('\n  This todo already has a context. Use ').white('e').red(' to edit or ').white('d').red(' to delete it first.\n');
+        term.gray('  Press any key to continue...');
+        await new Promise((resolve) => {
+          term.once('key', () => resolve());
+        });
       }
     } else if (key === 'e' || key === 'E') {
       // Edit context
       if (currentTodo.contextId) {
         await editContextInteractive(currentTodo.contextId);
+      } else {
+        // Show message that no context exists
+        term.red('\n  This todo has no context to edit. Use ').white('a').red(' to add a context first.\n');
+        term.gray('  Press any key to continue...');
+        await new Promise((resolve) => {
+          term.once('key', () => resolve());
+        });
       }
     } else if (key === 'd' || key === 'D') {
       // Delete context link
       if (currentTodo.contextId) {
         await deleteContextFromTodoInteractive(currentTodo, todaySection);
         running = false; // Go back after deleting
+      } else {
+        // Show message that no context exists
+        term.red('\n  This todo has no context to delete.\n');
+        term.gray('  Press any key to continue...');
+        await new Promise((resolve) => {
+          term.once('key', () => resolve());
+        });
       }
     } else if (key === 'ESCAPE') {
       // Go back
