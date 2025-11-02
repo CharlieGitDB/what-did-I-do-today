@@ -19,7 +19,8 @@ export class ConfluenceClient {
   constructor(baseUrl, email, apiToken) {
     this.baseUrl = baseUrl;
     this.auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
-    this.apiUrl = `${baseUrl}/wiki/api/v2`;
+    // Use v1 REST API for better stability and storage format support
+    this.apiUrl = `${baseUrl}/wiki/rest/api`;
   }
 
   /**
@@ -37,13 +38,19 @@ export class ConfluenceClient {
         headers: {
           'Authorization': `Basic ${this.auth}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'wdidt-cli/1.0.0'
         },
-        data
+        data,
+        timeout: 30000 // 30 second timeout
       });
       return response.data;
     } catch (error) {
       if (error.response) {
+        // Check if it's an HTML error response (CloudFront blocking)
+        if (typeof error.response.data === 'string' && error.response.data.includes('<!DOCTYPE HTML')) {
+          throw new Error(`Confluence API blocked by CloudFront (${error.response.status}). This may be due to HTML content triggering security rules. Try simplifying the content or check your Confluence permissions.`);
+        }
         throw new Error(`Confluence API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
       }
       throw error;
@@ -57,7 +64,7 @@ export class ConfluenceClient {
    * @returns {Promise<ConfluencePage|null>} Page if found, null otherwise
    */
   async findPageByTitle(spaceKey, title) {
-    const response = await this.request('GET', `/pages?space-key=${spaceKey}&title=${encodeURIComponent(title)}`);
+    const response = await this.request('GET', `/content?spaceKey=${spaceKey}&title=${encodeURIComponent(title)}&expand=version`);
 
     if (response.results && response.results.length > 0) {
       const page = response.results[0];
@@ -81,20 +88,24 @@ export class ConfluenceClient {
    */
   async createPage(spaceKey, title, content, parentId = null) {
     const pageData = {
-      spaceId: await this.getSpaceId(spaceKey),
-      status: 'current',
+      type: 'page',
       title: title,
+      space: {
+        key: spaceKey
+      },
       body: {
-        representation: 'storage',
-        value: content
+        storage: {
+          value: content,
+          representation: 'storage'
+        }
       }
     };
 
     if (parentId) {
-      pageData.parentId = parentId;
+      pageData.ancestors = [{ id: parentId }];
     }
 
-    const response = await this.request('POST', '/pages', pageData);
+    const response = await this.request('POST', '/content', pageData);
 
     return {
       id: response.id,
@@ -113,19 +124,20 @@ export class ConfluenceClient {
    */
   async updatePage(pageId, title, content, currentVersion) {
     const pageData = {
-      id: pageId,
-      status: 'current',
+      type: 'page',
       title: title,
       body: {
-        representation: 'storage',
-        value: content
+        storage: {
+          value: content,
+          representation: 'storage'
+        }
       },
       version: {
         number: currentVersion + 1
       }
     };
 
-    const response = await this.request('PUT', `/pages/${pageId}`, pageData);
+    const response = await this.request('PUT', `/content/${pageId}`, pageData);
 
     return {
       id: response.id,
@@ -140,10 +152,10 @@ export class ConfluenceClient {
    * @returns {Promise<string>} Space ID
    */
   async getSpaceId(spaceKey) {
-    const response = await this.request('GET', `/spaces?keys=${spaceKey}`);
+    const response = await this.request('GET', `/space/${spaceKey}`);
 
-    if (response.results && response.results.length > 0) {
-      return response.results[0].id;
+    if (response && response.id) {
+      return response.id;
     }
 
     throw new Error(`Space not found: ${spaceKey}`);
