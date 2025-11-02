@@ -22,6 +22,11 @@ program
   .argument('[text...]', 'Todo text (if no subcommand, adds a todo)')
   .option('-c, --context <text>', 'Context for the todo')
   .action((text, options) => {
+    // If no arguments and no context flag, show help
+    if ((!text || text.length === 0) && !options.context) {
+      program.help();
+    }
+
     // Default action: add a todo
     if (text && text.length > 0) {
       // Check if last argument looks like context (if no --context flag)
