@@ -145,7 +145,7 @@ export async function initializeTodaySection() {
   const todaySection = getTodaySection(content);
 
   if (!todaySection) {
-    const newSection = `<h2>${today}</h2>\n\n<h3>Todos</h3>\n<ac:task-list>\n</ac:task-list>\n\n<h3>Context</h3>\n\n<h3>References</h3>\n\n<h3>Notes</h3>\n<p></p>\n\n`;
+    const newSection = `<h2>${today}</h2>\n\n<h3>Todos</h3>\n<ul class="inline-task-list">\n</ul>\n\n<h3>Context</h3>\n\n<h3>References</h3>\n\n<h3>Notes</h3>\n<p></p>\n\n`;
 
     // Get the monthly header
     const monthHeader = `<h1>${getMonthYearDisplay()}</h1>\n\n`;
@@ -193,29 +193,22 @@ export function extractTodos(sectionContent) {
     }
 
     if (inTodoSection && line.trim()) {
-      // Match Confluence task format: <ac:task><ac:task-id>...</ac:task-id>...
-      const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(COMPLETE|INCOMPLETE)<\/ac:task-status><ac:task-body><span[^>]*>(.+?)<\/span><\/ac:task-body><\/ac:task>/);
+      // Match Confluence inline task format
+      const todoMatch = line.match(/<li data-inline-task-id="(\d+)"><span class="placeholder-inline-tasks" contenteditable="false">(✓|☐) (.+?)<\/span><\/li>/);
       if (todoMatch) {
         const todoId = `todo-${todoMatch[1]}`;
+        const checked = todoMatch[2] === '✓';
         let text = todoMatch[3];
         const contextIds = [];
-        const checked = todoMatch[2] === 'COMPLETE';
 
-        // Extract all context links (new format)
+        // Extract all context links
         const anchorMatches = text.matchAll(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/g);
         for (const match of anchorMatches) {
           contextIds.push(match[1]);
         }
 
-        // Extract old-style context references
-        const oldContextMatches = text.matchAll(/\[context: ([^\]]+)\]/g);
-        for (const match of oldContextMatches) {
-          contextIds.push(match[1]);
-        }
-
         // Remove all context links from the text
         text = text.replace(/\s*<a href="#context-[^"]+"[^>]*>📎 [^<]+<\/a>/g, '').trim();
-        text = text.replace(/\s*\[context: [^\]]+\]/g, '').trim();
 
         todos.push({
           checked: checked,
@@ -254,7 +247,7 @@ export function getNextTodoId(sectionContent) {
     }
 
     if (inTodoSection && line.trim()) {
-      const idMatch = line.match(/<ac:task-id>(\d+)<\/ac:task-id>/);
+      const idMatch = line.match(/data-inline-task-id="(\d+)"/);
       if (idMatch) {
         const id = parseInt(idMatch[1], 10);
         if (id > maxId) {
@@ -295,13 +288,13 @@ export function updateTodoInSection(sectionContent, lineNumber, checked) {
   const line = lines[lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(COMPLETE|INCOMPLETE)<\/ac:task-status><ac:task-body><span[^>]*>(.+?)<\/span><\/ac:task-body><\/ac:task>/);
+    const todoMatch = line.match(/<li data-inline-task-id="(\d+)"><span class="placeholder-inline-tasks" contenteditable="false">(✓|☐) (.+?)<\/span><\/li>/);
     if (todoMatch) {
       const todoId = todoMatch[1];
-      const status = checked ? 'COMPLETE' : 'INCOMPLETE';
+      const checkmark = checked ? '✓' : '☐';
       const body = todoMatch[3];
 
-      lines[lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${body}</span></ac:task-body></ac:task>`;
+      lines[lineNumber] = `<li data-inline-task-id="${todoId}"><span class="placeholder-inline-tasks" contenteditable="false">${checkmark} ${body}</span></li>`;
     }
   }
 
