@@ -12,7 +12,7 @@ import path from 'path';
 export async function syncToConfluence() {
   console.log(chalk.blue('🔄 Syncing notes to Confluence...\n'));
 
-  const config = getConfig();
+  const config = await getConfig();
 
   // Check if Confluence is configured
   if (!config || !config.confluence || !config.confluence.enabled) {
