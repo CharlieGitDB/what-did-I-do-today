@@ -16,8 +16,7 @@ export async function configureConfluence() {
     console.log(chalk.green('✓ Confluence is already configured:'));
     console.log(`  URL: ${chalk.cyan(config.confluence.baseUrl)}`);
     console.log(`  Email: ${chalk.cyan(config.confluence.email)}`);
-    console.log(`  Space: ${chalk.cyan(config.confluence.spaceKey)}`);
-    console.log(`  Parent Page ID: ${chalk.cyan(config.confluence.parentPageId || '(none)')}\n`);
+    console.log(`  Space: ${chalk.cyan(config.confluence.spaceKey)}\n`);
 
     const { action } = await inquirer.prompt([
       {
@@ -195,15 +194,6 @@ async function updateConfluenceSettings(config) {
     spaceKey = manualAnswer.spaceKey;
   }
 
-  const finalAnswers = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'parentPageId',
-      message: 'Parent page ID (optional):',
-      default: currentConf.parentPageId || ''
-    }
-  ]);
-
   // Update config with new values, preserving API token if not updated
   config.confluence = {
     enabled: true,
@@ -211,7 +201,7 @@ async function updateConfluenceSettings(config) {
     email: basicAnswers.email,
     apiToken: apiToken,
     spaceKey: spaceKey,
-    parentPageId: finalAnswers.parentPageId
+    parentPageId: '' // Daily Notes folder will be created automatically
   };
 
   writeConfig(config);

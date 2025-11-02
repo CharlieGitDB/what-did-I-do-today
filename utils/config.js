@@ -252,22 +252,13 @@ export async function promptConfluenceSetup() {
     spaceKey = manualAnswer.spaceKey;
   }
 
-  const finalAnswers = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'parentPageId',
-      message: 'Parent page ID (optional - leave empty to create at space root):',
-      default: ''
-    }
-  ]);
-
   return {
     enabled: true,
     baseUrl: basicAnswers.baseUrl.replace(/\/$/, ''),
     email: basicAnswers.email,
     apiToken: basicAnswers.apiToken,
     spaceKey: spaceKey,
-    parentPageId: finalAnswers.parentPageId
+    parentPageId: '' // Daily Notes folder will be created automatically
   };
 }
 
