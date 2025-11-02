@@ -90,7 +90,8 @@ program
 program
   .command('test-confluence')
   .description('Test Confluence connection and permissions')
-  .action(async () => {
+  .option('--debug', 'Show debug information including auth header')
+  .action(async (options) => {
     const chalk = (await import('chalk')).default;
     const { getConfig } = await import('../utils/config.js');
     const { ConfluenceClient } = await import('../utils/confluenceClient.js');
@@ -105,13 +106,22 @@ program
       return;
     }
 
-    const { baseUrl, email, spaceKey } = config.confluence;
+    const { baseUrl, email, spaceKey, apiToken } = config.confluence;
 
     console.log(chalk.gray(`URL: ${baseUrl}`));
     console.log(chalk.gray(`Email: ${email}`));
-    console.log(chalk.gray(`Space: ${spaceKey}\n`));
+    console.log(chalk.gray(`Space: ${spaceKey}`));
 
-    const client = new ConfluenceClient(baseUrl, email, config.confluence.apiToken);
+    if (options.debug) {
+      console.log(chalk.gray(`API Token: ${apiToken.substring(0, 10)}...${apiToken.substring(apiToken.length - 4)}`));
+      const authString = `${email}:${apiToken}`;
+      const base64Auth = Buffer.from(authString).toString('base64');
+      console.log(chalk.gray(`Auth Header: Basic ${base64Auth.substring(0, 20)}...${base64Auth.substring(base64Auth.length - 10)}`));
+    }
+
+    console.log('');
+
+    const client = new ConfluenceClient(baseUrl, email, apiToken);
 
     try {
       console.log(chalk.gray('1. Testing authentication...'));
@@ -119,6 +129,10 @@ program
 
       if (!connected) {
         console.log(chalk.red('   ✗ Authentication failed\n'));
+        console.log(chalk.yellow('   This usually means:'));
+        console.log(chalk.yellow('   - API token is invalid or expired'));
+        console.log(chalk.yellow('   - Email address is incorrect'));
+        console.log(chalk.yellow('   - Token lacks necessary permissions\n'));
         return;
       }
       console.log(chalk.green('   ✓ Authentication successful\n'));
