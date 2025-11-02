@@ -33,25 +33,25 @@ for (const file of files) {
     }
   );
 
-  // Remove Unicode checkboxes from existing migrated tasks
+  // Convert data-inline-task-id format to ac:task format
   content = content.replace(
-    /<li data-inline-task-id="(\d+)"><span class="placeholder-inline-tasks"[^>]*>(✓|☐) (.+?)<\/span><\/li>/g,
-    (match, id, checkbox, body) => {
+    /<li data-inline-task-id="(\d+)"(?:\s+data-inline-task-status="(checked|unchecked)")?><span class="placeholder-inline-tasks"[^>]*>(.+?)<\/span><\/li>/g,
+    (match, id, status, body) => {
       changed = true;
-      const taskStatus = checkbox === '✓' ? 'checked' : 'unchecked';
-      return `<li data-inline-task-id="${id}" data-inline-task-status="${taskStatus}"><span class="placeholder-inline-tasks">${body}</span></li>`;
+      const taskStatus = status === 'checked' ? 'complete' : 'incomplete';
+      return `<ac:task><ac:task-id>${id}</ac:task-id><ac:task-status>${taskStatus}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${body}</span></ac:task-body></ac:task>`;
     }
   );
 
-  // Replace <ul> with <ul class="inline-task-list"> after <h3>Todos</h3>
+  // Replace <ul> with <ac:task-list> after <h3>Todos</h3>
   content = content.replace(
-    /(<h3>Todos<\/h3>\s*\n)(<ul>)/g,
-    '$1<ul class="inline-task-list">'
+    /(<h3>Todos<\/h3>\s*\n)(<ul(?:\s+class="inline-task-list")?>)/g,
+    '$1<ac:task-list>'
   );
-
-  // Replace ac:task-list with ul
-  content = content.replace(/<ac:task-list>/g, '<ul class="inline-task-list">');
-  content = content.replace(/<\/ac:task-list>/g, '</ul>');
+  content = content.replace(
+    /(<\/ul>)(\s*\n\s*<h3>(?!Todos))/g,
+    '</ac:task-list>$2'
+  );
 
   // Replace old context div format with info panels
   content = content.replace(
