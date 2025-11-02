@@ -222,6 +222,37 @@ export class ConfluenceClient {
   }
 
   /**
+   * Updates the parent page with links to all child pages
+   * @param {string} spaceKey - Space key
+   * @param {string} parentTitle - Parent page title
+   * @param {Array<{title: string, id: string}>} childPages - Array of child page info
+   * @returns {Promise<void>}
+   */
+  async updateParentPageLinks(spaceKey, parentTitle, childPages) {
+    const parentPage = await this.findPageByTitle(spaceKey, parentTitle);
+
+    if (!parentPage) {
+      return;
+    }
+
+    // Sort child pages by title (newest first - descending order)
+    const sortedPages = [...childPages].sort((a, b) => b.title.localeCompare(a.title));
+
+    // Build content with links to child pages
+    let content = '<p>This page contains daily notes organized by month.</p>\n';
+    content += '<h2>Monthly Notes</h2>\n';
+    content += '<ul>\n';
+
+    for (const child of sortedPages) {
+      content += `  <li><ac:link><ri:page ri:content-title="${child.title}" /></ac:link></li>\n`;
+    }
+
+    content += '</ul>';
+
+    await this.updatePage(parentPage.id, parentTitle, content, parentPage.version);
+  }
+
+  /**
    * Creates or updates a page
    * @param {string} spaceKey - Space key
    * @param {string} title - Page title

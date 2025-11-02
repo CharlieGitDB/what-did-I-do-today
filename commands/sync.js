@@ -59,6 +59,7 @@ export async function syncToConfluence() {
     let created = 0;
     let updated = 0;
     let errors = 0;
+    const syncedPages = [];
 
     // Sync each file
     for (const filePath of files) {
@@ -82,6 +83,12 @@ export async function syncToConfluence() {
           dailyNotesParentId
         );
 
+        // Track synced pages for parent page update
+        syncedPages.push({
+          title: pageTitle,
+          id: result.page.id
+        });
+
         if (result.action === 'created') {
           console.log(chalk.green(`✓ Created: ${pageTitle}`));
           created++;
@@ -92,6 +99,16 @@ export async function syncToConfluence() {
       } catch (error) {
         console.log(chalk.red(`✗ Failed: ${pageTitle} - ${error.message}`));
         errors++;
+      }
+    }
+
+    // Update parent page with links to all child pages
+    if (syncedPages.length > 0) {
+      try {
+        console.log(chalk.gray('\nUpdating Daily Notes page with links...\n'));
+        await client.updateParentPageLinks(spaceKey, 'Daily Notes', syncedPages);
+      } catch (error) {
+        console.log(chalk.yellow(`⚠ Could not update parent page links: ${error.message}\n`));
       }
     }
 
