@@ -235,8 +235,13 @@ export class ConfluenceClient {
       return;
     }
 
-    // Sort child pages by title (newest first - descending order)
-    const sortedPages = [...childPages].sort((a, b) => b.title.localeCompare(a.title));
+    // Sort child pages by date (newest first - descending order)
+    const sortedPages = [...childPages].sort((a, b) => {
+      // Parse "Month YYYY" format to Date objects
+      const dateA = new Date(a.title);
+      const dateB = new Date(b.title);
+      return dateB - dateA; // Descending order (newest first)
+    });
 
     // Build content with links to child pages
     let content = '<p>This page contains daily notes organized by month.</p>\n';
