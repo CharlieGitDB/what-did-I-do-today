@@ -145,7 +145,7 @@ export async function initializeTodaySection() {
   const todaySection = getTodaySection(content);
 
   if (!todaySection) {
-    const newSection = `<h2>${today}</h2>\n\n<h3>Todos</h3>\n<ul>\n</ul>\n\n<h3>Context</h3>\n\n<h3>References</h3>\n\n<h3>Notes</h3>\n<p></p>\n\n`;
+    const newSection = `<h2>${today}</h2>\n\n<h3>Todos</h3>\n<ac:task-list>\n</ac:task-list>\n\n<h3>Context</h3>\n\n<h3>References</h3>\n\n<h3>Notes</h3>\n<p></p>\n\n`;
 
     // Get the monthly header
     const monthHeader = `<h1>${getMonthYearDisplay()}</h1>\n\n`;
@@ -193,13 +193,13 @@ export function extractTodos(sectionContent) {
     }
 
     if (inTodoSection && line.trim()) {
-      // Match Confluence task format with optional id: <li id="todo-1"><ac:task>...
-      const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+      // Match Confluence task format: <ac:task><ac:task-id>...</ac:task-id>...
+      const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(COMPLETE|INCOMPLETE)<\/ac:task-status><ac:task-body><span[^>]*>(.+?)<\/span><\/ac:task-body><\/ac:task>/);
       if (todoMatch) {
-        const todoId = todoMatch[1] || null;
+        const todoId = `todo-${todoMatch[1]}`;
         let text = todoMatch[3];
         const contextIds = [];
-        const checked = todoMatch[2] === 'complete';
+        const checked = todoMatch[2] === 'COMPLETE';
 
         // Extract all context links (new format)
         const anchorMatches = text.matchAll(/<a href="#context-([^"]+)"[^>]*>📎 [^<]+<\/a>/g);
@@ -254,7 +254,7 @@ export function getNextTodoId(sectionContent) {
     }
 
     if (inTodoSection && line.trim()) {
-      const idMatch = line.match(/<li id="todo-(\d+)">/);
+      const idMatch = line.match(/<ac:task-id>(\d+)<\/ac:task-id>/);
       if (idMatch) {
         const id = parseInt(idMatch[1], 10);
         if (id > maxId) {
@@ -295,19 +295,13 @@ export function updateTodoInSection(sectionContent, lineNumber, checked) {
   const line = lines[lineNumber];
 
   if (line) {
-    // Match with optional id attribute
-    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+    const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(COMPLETE|INCOMPLETE)<\/ac:task-status><ac:task-body><span[^>]*>(.+?)<\/span><\/ac:task-body><\/ac:task>/);
     if (todoMatch) {
       const todoId = todoMatch[1];
-      const status = checked ? 'complete' : 'incomplete';
+      const status = checked ? 'COMPLETE' : 'INCOMPLETE';
       const body = todoMatch[3];
 
-      // Preserve ID if present
-      if (todoId) {
-        lines[lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${body}</ac:task-body></ac:task></li>`;
-      } else {
-        lines[lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${body}</ac:task-body></ac:task></li>`;
-      }
+      lines[lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${body}</span></ac:task-body></ac:task>`;
     }
   }
 
@@ -396,7 +390,7 @@ export async function addContentToSection(sectionName, content) {
  * @returns {Promise<void>}
  */
 export async function addContext(contextId, contextText) {
-  const formattedContent = `<div id="context-${contextId}" style="border-left: 3px solid #0066cc; padding-left: 10px; margin-bottom: 15px;">\n<p><strong>[${contextId}]</strong></p>\n<p>${contextText}</p>\n</div>`;
+  const formattedContent = `<ac:structured-macro ac:name="info" ac:schema-version="1"><ac:parameter ac:name="title">[${contextId}]</ac:parameter><ac:rich-text-body><p>${contextText}</p></ac:rich-text-body></ac:structured-macro>`;
   await addContentToSection('Context', formattedContent);
 }
 
@@ -409,7 +403,7 @@ export async function addContext(contextId, contextText) {
 export function getContextById(sectionContent, contextId) {
   const lines = sectionContent.split('\n');
   let inContextSection = false;
-  let inContextDiv = false;
+  let inInfoPanel = false;
   const contextLines = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -426,29 +420,23 @@ export function getContextById(sectionContent, contextId) {
     }
 
     if (inContextSection) {
-      // Check for div start with context ID (new format)
-      if (line.includes(`id="context-${contextId}"`)) {
-        inContextDiv = true;
+      // Check for info panel with context ID
+      if (line.includes(`<ac:parameter ac:name="title">[${contextId}]</ac:parameter>`)) {
+        inInfoPanel = true;
         continue;
       }
 
-      // Check for old format
-      if (line === `<p><strong>[${contextId}]</strong></p>`) {
-        inContextDiv = true;
-        continue;
-      }
-
-      if (inContextDiv) {
-        // Check for end of div
-        if (line === '</div>') {
+      if (inInfoPanel) {
+        // Check for end of info panel
+        if (line.includes('</ac:structured-macro>')) {
           break;
         }
-        // Check if we hit another context (old format)
-        if (line.match(/<p><strong>\[.+\]<\/strong><\/p>/) || line.includes('id="context-')) {
+        // Check if we hit another context
+        if (line.includes('<ac:structured-macro')) {
           break;
         }
-        // Collect context lines (skip the ID line)
-        if (line.trim() && !line.includes(`[${contextId}]`)) {
+        // Collect context lines
+        if (line.trim() && !line.includes('ac:parameter') && !line.includes('ac:rich-text-body')) {
           contextLines.push(line);
         }
       }
@@ -490,16 +478,19 @@ export async function updateContext(contextId, newContextText) {
     }
 
     if (inContextSection) {
-      // Check for new div format
-      if (line.includes(`id="context-${contextId}"`)) {
-        contextStartIdx = i;
-      } else if (line === `<p><strong>[${contextId}]</strong></p>`) {
-        // Old format
-        contextStartIdx = i;
+      // Check for info panel format
+      if (line.includes(`<ac:parameter ac:name="title">[${contextId}]</ac:parameter>`)) {
+        // Find the start of the macro (might be on a previous line)
+        for (let j = i; j >= 0; j--) {
+          if (lines[j].includes('<ac:structured-macro ac:name="info"')) {
+            contextStartIdx = j;
+            break;
+          }
+        }
       } else if (contextStartIdx !== -1) {
         // Check for end of context block
-        if (line === '</div>' || line.match(/<p><strong>\[.+\]<\/strong><\/p>/) || line.includes('id="context-')) {
-          contextEndIdx = i;
+        if (line.includes('</ac:structured-macro>')) {
+          contextEndIdx = i + 1;
           break;
         }
       }
@@ -515,14 +506,9 @@ export async function updateContext(contextId, newContextText) {
   }
 
   // Replace the entire context block with updated version
-  const newContextBlock = [
-    `<div id="context-${contextId}" style="border-left: 3px solid #0066cc; padding-left: 10px; margin-bottom: 15px;">`,
-    `<p><strong>[${contextId}]</strong></p>`,
-    `<p>${newContextText}</p>`,
-    `</div>`
-  ];
+  const newContextBlock = `<ac:structured-macro ac:name="info" ac:schema-version="1"><ac:parameter ac:name="title">[${contextId}]</ac:parameter><ac:rich-text-body><p>${newContextText}</p></ac:rich-text-body></ac:structured-macro>`;
 
-  lines.splice(contextStartIdx, contextEndIdx - contextStartIdx, ...newContextBlock);
+  lines.splice(contextStartIdx, contextEndIdx - contextStartIdx, newContextBlock);
 
   await replaceTodaySection(lines.join('\n'));
 }
@@ -557,19 +543,19 @@ export async function deleteContext(contextId) {
     }
 
     if (inContextSection) {
-      // Check for new div format
-      if (line.includes(`id="context-${contextId}"`)) {
-        contextStartIdx = i;
-      } else if (line === `<p><strong>[${contextId}]</strong></p>`) {
-        // Old format
-        contextStartIdx = i;
+      // Check for info panel format
+      if (line.includes(`<ac:parameter ac:name="title">[${contextId}]</ac:parameter>`)) {
+        // Find the start of the macro (might be on a previous line)
+        for (let j = i; j >= 0; j--) {
+          if (lines[j].includes('<ac:structured-macro ac:name="info"')) {
+            contextStartIdx = j;
+            break;
+          }
+        }
       } else if (contextStartIdx !== -1) {
         // Check for end of context block
-        if (line === '</div>') {
-          contextEndIdx = i + 1; // Include the closing div
-          break;
-        } else if (line.match(/<p><strong>\[.+\]<\/strong><\/p>/) || line.includes('id="context-')) {
-          contextEndIdx = i;
+        if (line.includes('</ac:structured-macro>')) {
+          contextEndIdx = i + 1;
           break;
         }
       }
@@ -581,16 +567,7 @@ export async function deleteContext(contextId) {
   }
 
   if (contextEndIdx === -1) {
-    // Find the next context or end
-    for (let i = contextStartIdx + 1; i < lines.length; i++) {
-      if (lines[i].startsWith('<h3>') || lines[i].includes('id="context-') || lines[i].match(/<p><strong>\[.+\]<\/strong><\/p>/)) {
-        contextEndIdx = i;
-        break;
-      }
-    }
-    if (contextEndIdx === -1) {
-      contextEndIdx = lines.length;
-    }
+    contextEndIdx = lines.length;
   }
 
   // Remove the context block
@@ -609,6 +586,7 @@ export function getAllContexts(sectionContent) {
   const contexts = [];
   let inContextSection = false;
   let currentContextId = null;
+  let inInfoPanel = false;
   let currentContextLines = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -624,7 +602,7 @@ export function getAllContexts(sectionContent) {
       if (currentContextId && currentContextLines.length > 0) {
         contexts.push({
           id: currentContextId,
-          text: currentContextLines.join('\n').replace(/<\/?p>/g, '').replace(/<\/?div[^>]*>/g, '').trim()
+          text: currentContextLines.join('\n').replace(/<[^>]+>/g, '').trim()
         });
       }
       inContextSection = false;
@@ -632,9 +610,9 @@ export function getAllContexts(sectionContent) {
     }
 
     if (inContextSection) {
-      // Check for new div format with ID
-      const divMatch = line.match(/id="context-([^"]+)"/);
-      if (divMatch) {
+      // Check for info panel format
+      const titleMatch = line.match(/<ac:parameter ac:name="title">\[(.+?)\]<\/ac:parameter>/);
+      if (titleMatch) {
         // Save previous context if any
         if (currentContextId && currentContextLines.length > 0) {
           contexts.push({
@@ -643,23 +621,22 @@ export function getAllContexts(sectionContent) {
           });
         }
         // Start new context
-        currentContextId = divMatch[1];
+        currentContextId = titleMatch[1];
         currentContextLines = [];
-      } else {
-        // Check for old format
-        const idMatch = line.match(/<p><strong>\[(.+)\]<\/strong><\/p>/);
-        if (idMatch) {
-          // Save previous context if any
+        inInfoPanel = true;
+      } else if (inInfoPanel) {
+        if (line.includes('</ac:structured-macro>')) {
+          // End of current context
           if (currentContextId && currentContextLines.length > 0) {
             contexts.push({
               id: currentContextId,
               text: currentContextLines.join('\n').replace(/<[^>]+>/g, '').trim()
             });
           }
-          // Start new context
-          currentContextId = idMatch[1];
+          currentContextId = null;
           currentContextLines = [];
-        } else if (currentContextId && line.trim() && line !== '</div>' && !line.includes(`[${currentContextId}]`)) {
+          inInfoPanel = false;
+        } else if (line.trim() && !line.includes('ac:parameter') && !line.includes('ac:rich-text-body') && !line.includes('<ac:structured-macro')) {
           currentContextLines.push(line);
         }
       }

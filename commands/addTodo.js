@@ -72,7 +72,7 @@ export async function addTodo(text, contextText) {
   const lines = todaySection.split('\n');
 
   let todoSectionIdx = -1;
-  let ulIdx = -1;
+  let taskListIdx = -1;
   let insertIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
@@ -81,12 +81,12 @@ export async function addTodo(text, contextText) {
       continue;
     }
 
-    if (todoSectionIdx !== -1 && ulIdx === -1 && lines[i] === '<ul>') {
-      ulIdx = i;
+    if (todoSectionIdx !== -1 && taskListIdx === -1 && lines[i] === '<ac:task-list>') {
+      taskListIdx = i;
       continue;
     }
 
-    if (todoSectionIdx !== -1 && lines[i] === '</ul>') {
+    if (todoSectionIdx !== -1 && lines[i] === '</ac:task-list>') {
       insertIdx = i;
       break;
     }
@@ -96,8 +96,8 @@ export async function addTodo(text, contextText) {
     }
   }
 
-  if (insertIdx === -1 || ulIdx === -1) {
-    // No ul found, shouldn't happen with our structure but handle it
+  if (insertIdx === -1 || taskListIdx === -1) {
+    // No task-list found, shouldn't happen with our structure but handle it
     insertIdx = todoSectionIdx + 2;
   }
 
@@ -107,9 +107,9 @@ export async function addTodo(text, contextText) {
   // Create todo line with ID and optional context anchor link
   let todoLine;
   if (contextId) {
-    todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></ac:task-body></ac:task></li>`;
+    todoLine = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>INCOMPLETE</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></span></ac:task-body></ac:task>`;
   } else {
-    todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${todoText}</ac:task-body></ac:task></li>`;
+    todoLine = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>INCOMPLETE</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${todoText}</span></ac:task-body></ac:task>`;
   }
 
   lines.splice(insertIdx, 0, todoLine);
