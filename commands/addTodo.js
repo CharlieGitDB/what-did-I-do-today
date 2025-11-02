@@ -104,12 +104,12 @@ export async function addTodo(text, contextText) {
   // Get next sequential todo ID
   const todoId = getNextTodoId(todaySection);
 
-  // Create todo line with ID and optional context anchor link using Unicode checkboxes
+  // Create todo line with ID and status attribute (no Unicode characters)
   let todoLine;
   if (contextId) {
-    todoLine = `<li data-inline-task-id="${todoId}"><span class="placeholder-inline-tasks" contenteditable="false">☐ ${todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></span></li>`;
+    todoLine = `<li data-inline-task-id="${todoId}" data-inline-task-status="unchecked"><span class="placeholder-inline-tasks">${todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></span></li>`;
   } else {
-    todoLine = `<li data-inline-task-id="${todoId}"><span class="placeholder-inline-tasks" contenteditable="false">☐ ${todoText}</span></li>`;
+    todoLine = `<li data-inline-task-id="${todoId}" data-inline-task-status="unchecked"><span class="placeholder-inline-tasks">${todoText}</span></li>`;
   }
 
   lines.splice(insertIdx, 0, todoLine);

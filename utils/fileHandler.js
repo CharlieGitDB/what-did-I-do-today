@@ -193,11 +193,12 @@ export function extractTodos(sectionContent) {
     }
 
     if (inTodoSection && line.trim()) {
-      // Match Confluence inline task format
-      const todoMatch = line.match(/<li data-inline-task-id="(\d+)"><span class="placeholder-inline-tasks" contenteditable="false">(✓|☐) (.+?)<\/span><\/li>/);
+      // Match Confluence inline task format with data-inline-task-status
+      const todoMatch = line.match(/<li data-inline-task-id="(\d+)"(?:\s+data-inline-task-status="(checked|unchecked)")?><span class="placeholder-inline-tasks"[^>]*>(.+?)<\/span><\/li>/);
       if (todoMatch) {
         const todoId = `todo-${todoMatch[1]}`;
-        const checked = todoMatch[2] === '✓';
+        const status = todoMatch[2];
+        const checked = status === 'checked';
         let text = todoMatch[3];
         const contextIds = [];
 
@@ -288,13 +289,13 @@ export function updateTodoInSection(sectionContent, lineNumber, checked) {
   const line = lines[lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<li data-inline-task-id="(\d+)"><span class="placeholder-inline-tasks" contenteditable="false">(✓|☐) (.+?)<\/span><\/li>/);
+    const todoMatch = line.match(/<li data-inline-task-id="(\d+)"(?:\s+data-inline-task-status="(?:checked|unchecked)")?><span class="placeholder-inline-tasks"[^>]*>(.+?)<\/span><\/li>/);
     if (todoMatch) {
       const todoId = todoMatch[1];
-      const checkmark = checked ? '✓' : '☐';
-      const body = todoMatch[3];
+      const status = checked ? 'checked' : 'unchecked';
+      const body = todoMatch[2];
 
-      lines[lineNumber] = `<li data-inline-task-id="${todoId}"><span class="placeholder-inline-tasks" contenteditable="false">${checkmark} ${body}</span></li>`;
+      lines[lineNumber] = `<li data-inline-task-id="${todoId}" data-inline-task-status="${status}"><span class="placeholder-inline-tasks">${body}</span></li>`;
     }
   }
 

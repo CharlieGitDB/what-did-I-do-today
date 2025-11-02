@@ -12,14 +12,14 @@ for (const file of files) {
   let content = fs.readFileSync(file, 'utf-8');
   let changed = false;
 
-  // Replace old ac:task format with new Unicode checkbox format
+  // Replace old ac:task format with new status attribute format (no Unicode)
   // Pattern: <li id="todo-X"><ac:task><ac:task-status>complete/incomplete</ac:task-status><ac:task-body>TEXT</ac:task-body></ac:task></li>
   content = content.replace(
     /<li id="todo-(\d+)"><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/g,
     (match, id, status, body) => {
       changed = true;
-      const checkbox = status === 'complete' ? '✓' : '☐';
-      return `<li data-inline-task-id="${id}"><span class="placeholder-inline-tasks" contenteditable="false">${checkbox} ${body}</span></li>`;
+      const taskStatus = status === 'complete' ? 'checked' : 'unchecked';
+      return `<li data-inline-task-id="${id}" data-inline-task-status="${taskStatus}"><span class="placeholder-inline-tasks">${body}</span></li>`;
     }
   );
 
@@ -28,8 +28,18 @@ for (const file of files) {
     /<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(COMPLETE|INCOMPLETE)<\/ac:task-status><ac:task-body><span[^>]*>(.+?)<\/span><\/ac:task-body><\/ac:task>/g,
     (match, id, status, body) => {
       changed = true;
-      const checkbox = status === 'COMPLETE' ? '✓' : '☐';
-      return `<li data-inline-task-id="${id}"><span class="placeholder-inline-tasks" contenteditable="false">${checkbox} ${body}</span></li>`;
+      const taskStatus = status === 'COMPLETE' ? 'checked' : 'unchecked';
+      return `<li data-inline-task-id="${id}" data-inline-task-status="${taskStatus}"><span class="placeholder-inline-tasks">${body}</span></li>`;
+    }
+  );
+
+  // Remove Unicode checkboxes from existing migrated tasks
+  content = content.replace(
+    /<li data-inline-task-id="(\d+)"><span class="placeholder-inline-tasks"[^>]*>(✓|☐) (.+?)<\/span><\/li>/g,
+    (match, id, checkbox, body) => {
+      changed = true;
+      const taskStatus = checkbox === '✓' ? 'checked' : 'unchecked';
+      return `<li data-inline-task-id="${id}" data-inline-task-status="${taskStatus}"><span class="placeholder-inline-tasks">${body}</span></li>`;
     }
   );
 
