@@ -38,6 +38,14 @@ export async function syncToConfluence() {
 
     console.log(chalk.green('✓ Connected to Confluence successfully\n'));
 
+    // Find or create the "Daily Notes" parent page
+    console.log(chalk.gray('Setting up Daily Notes folder...\n'));
+    const dailyNotesParentId = await client.findOrCreateParentPage(
+      spaceKey,
+      'Daily Notes',
+      parentPageId || undefined
+    );
+
     // Get all monthly notes files
     const files = await getAllMonthlyNotesFiles();
 
@@ -66,12 +74,12 @@ export async function syncToConfluence() {
         // Files are already in Confluence XHTML format, use content directly
         const confluenceContent = content;
 
-        // Create or update page
+        // Create or update page under "Daily Notes" parent
         const result = await client.createOrUpdatePage(
           spaceKey,
-          `Daily Notes - ${pageTitle}`,
+          pageTitle,
           confluenceContent,
-          parentPageId || undefined
+          dailyNotesParentId
         );
 
         if (result.action === 'created') {

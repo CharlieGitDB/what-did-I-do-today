@@ -202,6 +202,26 @@ export class ConfluenceClient {
   }
 
   /**
+   * Finds or creates a parent page (like a folder)
+   * @param {string} spaceKey - Space key
+   * @param {string} title - Parent page title
+   * @param {string} [parentId] - Parent page ID for this parent (optional)
+   * @returns {Promise<string>} Parent page ID
+   */
+  async findOrCreateParentPage(spaceKey, title, parentId = null) {
+    const existingPage = await this.findPageByTitle(spaceKey, title);
+
+    if (existingPage) {
+      return existingPage.id;
+    }
+
+    // Create a simple parent page
+    const content = `<p>This page contains daily notes organized by month.</p>`;
+    const createdPage = await this.createPage(spaceKey, title, content, parentId);
+    return createdPage.id;
+  }
+
+  /**
    * Creates or updates a page
    * @param {string} spaceKey - Space key
    * @param {string} title - Page title
