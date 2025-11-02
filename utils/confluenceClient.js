@@ -175,6 +175,28 @@ export class ConfluenceClient {
   }
 
   /**
+   * Lists all spaces the user has access to
+   * @returns {Promise<Array<{key: string, name: string, id: string}>>} Array of spaces
+   */
+  async listSpaces() {
+    try {
+      const response = await this.request('GET', '/space?limit=100');
+
+      if (response.results) {
+        return response.results.map(space => ({
+          key: space.key,
+          name: space.name,
+          id: space.id
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      throw new Error(`Failed to list spaces: ${error.message}`);
+    }
+  }
+
+  /**
    * Creates or updates a page
    * @param {string} spaceKey - Space key
    * @param {string} title - Page title

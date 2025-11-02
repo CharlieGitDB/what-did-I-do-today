@@ -145,7 +145,7 @@ export async function promptConfluenceSetup() {
     };
   }
 
-  const confluenceAnswers = await inquirer.prompt([
+  const basicAnswers = await inquirer.prompt([
     {
       type: 'input',
       name: 'baseUrl',
@@ -181,18 +181,78 @@ export async function promptConfluenceSetup() {
         }
         return true;
       }
-    },
-    {
-      type: 'input',
-      name: 'spaceKey',
-      message: 'Confluence space key (e.g., MYSPACE):',
-      validate: (input) => {
-        if (!input.trim()) {
-          return 'Please enter a space key';
+    }
+  ]);
+
+  // Test connection and fetch spaces
+  console.log('\nTesting connection and fetching spaces...');
+
+  const { ConfluenceClient } = await import('./confluenceClient.js');
+  const client = new ConfluenceClient(
+    basicAnswers.baseUrl.replace(/\/$/, ''),
+    basicAnswers.email,
+    basicAnswers.apiToken
+  );
+
+  let spaceKey = '';
+
+  try {
+    const spaces = await client.listSpaces();
+
+    if (spaces.length === 0) {
+      console.log('\n⚠ No spaces found. You may not have access to any Confluence spaces.\n');
+      const manualAnswer = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'spaceKey',
+          message: 'Enter space key manually:',
+          validate: (input) => {
+            if (!input.trim()) {
+              return 'Please enter a space key';
+            }
+            return true;
+          }
         }
-        return true;
+      ]);
+      spaceKey = manualAnswer.spaceKey;
+    } else {
+      console.log(`\n✓ Found ${spaces.length} space(s)\n`);
+
+      const spaceAnswer = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'selectedSpace',
+          message: 'Select your Confluence space:',
+          choices: spaces.map(space => ({
+            name: `${space.name} (${space.key})`,
+            value: space.key
+          })),
+          pageSize: 10
+        }
+      ]);
+      spaceKey = spaceAnswer.selectedSpace;
+    }
+  } catch (error) {
+    console.log(`\n⚠ Could not fetch spaces: ${error.message}`);
+    console.log('Falling back to manual entry.\n');
+
+    const manualAnswer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'spaceKey',
+        message: 'Confluence space key (e.g., MYSPACE):',
+        validate: (input) => {
+          if (!input.trim()) {
+            return 'Please enter a space key';
+          }
+          return true;
+        }
       }
-    },
+    ]);
+    spaceKey = manualAnswer.spaceKey;
+  }
+
+  const finalAnswers = await inquirer.prompt([
     {
       type: 'input',
       name: 'parentPageId',
@@ -203,11 +263,11 @@ export async function promptConfluenceSetup() {
 
   return {
     enabled: true,
-    baseUrl: confluenceAnswers.baseUrl.replace(/\/$/, ''), // Remove trailing slash
-    email: confluenceAnswers.email,
-    apiToken: confluenceAnswers.apiToken,
-    spaceKey: confluenceAnswers.spaceKey,
-    parentPageId: confluenceAnswers.parentPageId
+    baseUrl: basicAnswers.baseUrl.replace(/\/$/, ''),
+    email: basicAnswers.email,
+    apiToken: basicAnswers.apiToken,
+    spaceKey: spaceKey,
+    parentPageId: finalAnswers.parentPageId
   };
 }
 

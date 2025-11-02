@@ -71,7 +71,7 @@ export async function configureConfluence() {
 async function updateConfluenceSettings(config) {
   const currentConf = config.confluence;
 
-  const answers = await inquirer.prompt([
+  const basicAnswers = await inquirer.prompt([
     {
       type: 'input',
       name: 'baseUrl',
@@ -116,19 +116,86 @@ async function updateConfluenceSettings(config) {
         }
         return true;
       }
-    },
-    {
-      type: 'input',
-      name: 'spaceKey',
-      message: 'Confluence space key:',
-      default: currentConf.spaceKey,
-      validate: (input) => {
-        if (!input.trim()) {
-          return 'Please enter a space key';
+    }
+  ]);
+
+  const apiToken = basicAnswers.updateApiToken ? basicAnswers.apiToken : currentConf.apiToken;
+
+  // Fetch spaces with current or new credentials
+  console.log('\nFetching spaces...');
+
+  const { ConfluenceClient } = await import('../utils/confluenceClient.js');
+  const client = new ConfluenceClient(
+    basicAnswers.baseUrl.replace(/\/$/, ''),
+    basicAnswers.email,
+    apiToken
+  );
+
+  let spaceKey = currentConf.spaceKey;
+
+  try {
+    const spaces = await client.listSpaces();
+
+    if (spaces.length === 0) {
+      console.log('\n⚠ No spaces found.\n');
+      const manualAnswer = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'spaceKey',
+          message: 'Confluence space key:',
+          default: currentConf.spaceKey,
+          validate: (input) => {
+            if (!input.trim()) {
+              return 'Please enter a space key';
+            }
+            return true;
+          }
         }
-        return true;
+      ]);
+      spaceKey = manualAnswer.spaceKey;
+    } else {
+      console.log(`\n✓ Found ${spaces.length} space(s)\n`);
+
+      // Find current space in the list to set as default
+      const currentSpaceIndex = spaces.findIndex(s => s.key === currentConf.spaceKey);
+
+      const spaceAnswer = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'selectedSpace',
+          message: 'Select your Confluence space:',
+          choices: spaces.map(space => ({
+            name: `${space.name} (${space.key})`,
+            value: space.key
+          })),
+          default: currentSpaceIndex >= 0 ? currentSpaceIndex : 0,
+          pageSize: 10
+        }
+      ]);
+      spaceKey = spaceAnswer.selectedSpace;
+    }
+  } catch (error) {
+    console.log(`\n⚠ Could not fetch spaces: ${error.message}`);
+    console.log('Using manual entry.\n');
+
+    const manualAnswer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'spaceKey',
+        message: 'Confluence space key:',
+        default: currentConf.spaceKey,
+        validate: (input) => {
+          if (!input.trim()) {
+            return 'Please enter a space key';
+          }
+          return true;
+        }
       }
-    },
+    ]);
+    spaceKey = manualAnswer.spaceKey;
+  }
+
+  const finalAnswers = await inquirer.prompt([
     {
       type: 'input',
       name: 'parentPageId',
@@ -140,11 +207,11 @@ async function updateConfluenceSettings(config) {
   // Update config with new values, preserving API token if not updated
   config.confluence = {
     enabled: true,
-    baseUrl: answers.baseUrl.replace(/\/$/, ''),
-    email: answers.email,
-    apiToken: answers.updateApiToken ? answers.apiToken : currentConf.apiToken,
-    spaceKey: answers.spaceKey,
-    parentPageId: answers.parentPageId
+    baseUrl: basicAnswers.baseUrl.replace(/\/$/, ''),
+    email: basicAnswers.email,
+    apiToken: apiToken,
+    spaceKey: spaceKey,
+    parentPageId: finalAnswers.parentPageId
   };
 
   writeConfig(config);
