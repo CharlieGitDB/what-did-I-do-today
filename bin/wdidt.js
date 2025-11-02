@@ -87,4 +87,50 @@ program
   .description('Sync all notes to Confluence')
   .action(syncToConfluence);
 
+program
+  .command('test-confluence')
+  .description('Test Confluence connection and permissions')
+  .action(async () => {
+    const chalk = (await import('chalk')).default;
+    const { getConfig } = await import('../utils/config.js');
+    const { ConfluenceClient } = await import('../utils/confluenceClient.js');
+
+    console.log(chalk.blue('Testing Confluence Connection\n'));
+
+    const config = await getConfig();
+
+    if (!config || !config.confluence || !config.confluence.enabled) {
+      console.log(chalk.yellow('⚠ Confluence sync is not configured.'));
+      console.log(`Run ${chalk.cyan('wdidt confluence')} to set it up.\n`);
+      return;
+    }
+
+    const { baseUrl, email, spaceKey } = config.confluence;
+
+    console.log(chalk.gray(`URL: ${baseUrl}`));
+    console.log(chalk.gray(`Email: ${email}`));
+    console.log(chalk.gray(`Space: ${spaceKey}\n`));
+
+    const client = new ConfluenceClient(baseUrl, email, config.confluence.apiToken);
+
+    try {
+      console.log(chalk.gray('1. Testing authentication...'));
+      const connected = await client.testConnection();
+
+      if (!connected) {
+        console.log(chalk.red('   ✗ Authentication failed\n'));
+        return;
+      }
+      console.log(chalk.green('   ✓ Authentication successful\n'));
+
+      console.log(chalk.gray('2. Testing space access...'));
+      const spaceId = await client.getSpaceId(spaceKey);
+      console.log(chalk.green(`   ✓ Space found (ID: ${spaceId})\n`));
+
+      console.log(chalk.green('✅ All tests passed! Your Confluence configuration is working.\n'));
+    } catch (error) {
+      console.log(chalk.red(`   ✗ Error: ${error.message}\n`));
+    }
+  });
+
 program.parse();

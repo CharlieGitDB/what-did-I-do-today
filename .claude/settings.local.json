@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wdidt --help:*)"
+      "Bash(wdidt --help:*)",
+      "Bash(DEBUG_CONTEXT=true node:*)"
     ],
     "deny": [],
     "ask": []

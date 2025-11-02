@@ -162,6 +162,19 @@ export class ConfluenceClient {
   }
 
   /**
+   * Tests the connection and authentication
+   * @returns {Promise<boolean>} True if connection successful
+   */
+  async testConnection() {
+    try {
+      await this.request('GET', '/user/current');
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Creates or updates a page
    * @param {string} spaceKey - Space key
    * @param {string} title - Page title

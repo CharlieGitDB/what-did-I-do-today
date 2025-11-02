@@ -27,6 +27,17 @@ export async function syncToConfluence() {
   const client = new ConfluenceClient(baseUrl, email, apiToken);
 
   try {
+    // Test connection first
+    console.log(chalk.gray('Testing connection to Confluence...\n'));
+    const connected = await client.testConnection();
+
+    if (!connected) {
+      console.log(chalk.red('✗ Could not connect to Confluence. Check your credentials.\n'));
+      return;
+    }
+
+    console.log(chalk.green('✓ Connected to Confluence successfully\n'));
+
     // Get all monthly notes files
     const files = await getAllMonthlyNotesFiles();
 
