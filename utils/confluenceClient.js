@@ -32,18 +32,23 @@ export class ConfluenceClient {
    */
   async request(method, endpoint, data = null) {
     try {
-      const response = await axios({
+      const config = {
         method,
         url: `${this.apiUrl}${endpoint}`,
         headers: {
           'Authorization': `Basic ${this.auth}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'wdidt-cli/1.0.0'
+          'Accept': 'application/json'
         },
-        data,
         timeout: 30000 // 30 second timeout
-      });
+      };
+
+      // Only add data if it's not null (CloudFront blocks GET requests with data: null)
+      if (data !== null) {
+        config.data = data;
+      }
+
+      const response = await axios(config);
       return response.data;
     } catch (error) {
       if (error.response) {
