@@ -2,6 +2,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { initializeTodaySection, replaceTodaySection, addContext, idExistsInAnyFile, getNextTodoId } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
+import { performAutoSync } from './sync.js';
 
 /**
  * Adds a new todo item to today's notes
@@ -121,4 +122,7 @@ export async function addTodo(text, contextText) {
   } else {
     console.log(chalk.green('✓') + ' Todo added successfully!');
   }
+
+  // Sync to Confluence if enabled (respects silentSync setting)
+  await performAutoSync();
 }

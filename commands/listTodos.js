@@ -15,6 +15,7 @@ import {
   getNextTodoId
 } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
+import { performAutoSync } from './sync.js';
 
 const term = termkit.terminal;
 
@@ -140,6 +141,9 @@ async function showTodoList() {
   term.grabInput(false);
   term.hideCursor(false);
   term.clear();
+
+  // Sync to Confluence if enabled (respects silentSync setting)
+  await performAutoSync();
 }
 
 /**
@@ -324,25 +328,44 @@ async function addTodoInteractive() {
   // Add todo to file
   const lines = todaySection.split('\n');
   let insertIdx = -1;
+  let todoSectionIdx = -1;
+  let taskListIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i] === '</ul>') {
+    if (lines[i] === '<h3>Todos</h3>') {
+      todoSectionIdx = i;
+      continue;
+    }
+
+    if (todoSectionIdx !== -1 && taskListIdx === -1 && lines[i] === '<ac:task-list>') {
+      taskListIdx = i;
+      continue;
+    }
+
+    if (todoSectionIdx !== -1 && lines[i] === '</ac:task-list>') {
       insertIdx = i;
+      break;
+    }
+
+    if (todoSectionIdx !== -1 && lines[i].startsWith('<h3>') && lines[i] !== '<h3>Todos</h3>') {
       break;
     }
   }
 
-  if (insertIdx !== -1) {
-    let todoLine;
-    if (contextId) {
-      todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${answers.todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></ac:task-body></ac:task></li>`;
-    } else {
-      todoLine = `<li id="todo-${todoId}"><ac:task><ac:task-status>incomplete</ac:task-status><ac:task-body>${answers.todoText}</ac:task-body></ac:task></li>`;
-    }
-
-    lines.splice(insertIdx, 0, todoLine);
-    await replaceTodaySection(lines.join('\n'));
+  if (insertIdx === -1 || taskListIdx === -1) {
+    // No task-list found, shouldn't happen with our structure but handle it
+    insertIdx = todoSectionIdx + 2;
   }
+
+  let todoLine;
+  if (contextId) {
+    todoLine = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${answers.todoText} <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a></span></ac:task-body></ac:task>`;
+  } else {
+    todoLine = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${answers.todoText}</span></ac:task-body></ac:task>`;
+  }
+
+  lines.splice(insertIdx, 0, todoLine);
+  await replaceTodaySection(lines.join('\n'));
 }
 
 /**
@@ -377,7 +400,7 @@ async function editTodoInteractive(todo, todaySection) {
   const line = lines[todo.lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+    const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task>/);
     if (todoMatch) {
       const todoId = todoMatch[1];
       const status = todoMatch[2];
@@ -400,11 +423,7 @@ async function editTodoInteractive(todo, todaySection) {
 
       const contextPart = contextLinks.join('');
 
-      if (todoId) {
-        lines[todo.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
-      } else {
-        lines[todo.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${newText}${contextPart}</ac:task-body></ac:task></li>`;
-      }
+      lines[todo.lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${newText}${contextPart}</span></ac:task-body></ac:task>`;
     }
   }
 
@@ -475,19 +494,18 @@ async function addContextToTodoInteractive(todo, todaySection) {
   const line = lines[todo.lineNumber];
 
   if (line) {
-    const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+    const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task>/);
     if (todoMatch) {
       const todoId = todoMatch[1];
       const status = todoMatch[2];
-      const text = todoMatch[3];
+      let text = todoMatch[3];
+
+      // Remove span tags if present to get clean text
+      text = text.replace(/<span[^>]*>/g, '').replace(/<\/span>/g, '');
 
       const contextLink = ` <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a>`;
 
-      if (todoId) {
-        lines[todo.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}${contextLink}</ac:task-body></ac:task></li>`;
-      } else {
-        lines[todo.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}${contextLink}</ac:task-body></ac:task></li>`;
-      }
+      lines[todo.lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${text}${contextLink}</span></ac:task-body></ac:task>`;
     }
   }
 
@@ -556,22 +574,21 @@ async function deleteContextFromTodoInteractive(todo, todaySection, contextId) {
     const line = lines[todo.lineNumber];
 
     if (line) {
-      const todoMatch = line.match(/<li(?:\s+id="(todo-\d+)")?><ac:task><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task><\/li>/);
+      const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task>/);
       if (todoMatch) {
         const todoId = todoMatch[1];
         const status = todoMatch[2];
         let text = todoMatch[3];
+
+        // Remove span tags if present
+        text = text.replace(/<span[^>]*>/g, '').replace(/<\/span>/g, '');
 
         // Remove only the specific context link
         const escapedContextId = contextId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         text = text.replace(new RegExp(`\\s*<a href="#context-${escapedContextId}"[^>]*>📎 [^<]+<\/a>`, 'g'), '').trim();
         text = text.replace(new RegExp(`\\s*\\[context: ${escapedContextId}\\]`, 'g'), '').trim();
 
-        if (todoId) {
-          lines[todo.lineNumber] = `<li id="${todoId}"><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
-        } else {
-          lines[todo.lineNumber] = `<li><ac:task><ac:task-status>${status}</ac:task-status><ac:task-body>${text}</ac:task-body></ac:task></li>`;
-        }
+        lines[todo.lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${text}</span></ac:task-body></ac:task>`;
       }
     }
 
