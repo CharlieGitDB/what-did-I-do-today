@@ -141,7 +141,8 @@ export async function promptConfluenceSetup() {
       email: '',
       apiToken: '',
       spaceKey: '',
-      parentPageId: ''
+      parentPageId: '',
+      silentSync: false
     };
   }
 
@@ -252,13 +253,24 @@ export async function promptConfluenceSetup() {
     spaceKey = manualAnswer.spaceKey;
   }
 
+  // Ask about silent sync preference
+  const syncPreference = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'silentSync',
+      message: 'Enable silent background sync? (If no, sync output will be shown)',
+      default: false
+    }
+  ]);
+
   return {
     enabled: true,
     baseUrl: basicAnswers.baseUrl.replace(/\/$/, ''),
     email: basicAnswers.email,
     apiToken: basicAnswers.apiToken,
     spaceKey: spaceKey,
-    parentPageId: '' // Daily Notes folder will be created automatically
+    parentPageId: '', // Daily Notes folder will be created automatically
+    silentSync: syncPreference.silentSync
   };
 }
 

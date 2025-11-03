@@ -1,6 +1,7 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { addContentToSection } from '../utils/fileHandler.js';
+import { performAutoSync } from './sync.js';
 
 /**
  * Adds content to the notes section
@@ -27,8 +28,15 @@ export async function addNote(text) {
     content = answers.content;
   }
 
-  const formattedContent = `<p>${content}</p>`;
+  // Get current timestamp
+  const now = new Date();
+  const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  const formattedContent = `<p style="color: #888; font-size: 0.85em; margin-bottom: 5px;">${timeString}</p>\n<p>${content}</p>`;
   await addContentToSection('Notes', formattedContent);
 
   console.log(chalk.green('✓') + ' Note added!');
+
+  // Sync to Confluence if enabled (respects silentSync setting)
+  await performAutoSync();
 }

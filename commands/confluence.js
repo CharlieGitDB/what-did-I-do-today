@@ -194,6 +194,16 @@ async function updateConfluenceSettings(config) {
     spaceKey = manualAnswer.spaceKey;
   }
 
+  // Ask about silent sync preference
+  const syncPreference = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'silentSync',
+      message: 'Enable silent background sync? (If no, sync output will be shown)',
+      default: currentConf.silentSync !== undefined ? currentConf.silentSync : false
+    }
+  ]);
+
   // Update config with new values, preserving API token if not updated
   config.confluence = {
     enabled: true,
@@ -201,7 +211,8 @@ async function updateConfluenceSettings(config) {
     email: basicAnswers.email,
     apiToken: apiToken,
     spaceKey: spaceKey,
-    parentPageId: '' // Daily Notes folder will be created automatically
+    parentPageId: '', // Daily Notes folder will be created automatically
+    silentSync: syncPreference.silentSync
   };
 
   writeConfig(config);

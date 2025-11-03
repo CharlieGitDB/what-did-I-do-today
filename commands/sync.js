@@ -6,6 +6,117 @@ import { ConfluenceClient } from '../utils/confluenceClient.js';
 import path from 'path';
 
 /**
+ * Silently syncs notes to Confluence if enabled
+ * Used for automatic background syncing after operations
+ * @returns {Promise<void>}
+ */
+export async function autoSyncToConfluence() {
+  try {
+    const config = await getConfig();
+
+    // Check if Confluence is configured and enabled
+    if (!config || !config.confluence || !config.confluence.enabled) {
+      return; // Silently skip if not configured
+    }
+
+    const { baseUrl, email, apiToken, spaceKey, parentPageId } = config.confluence;
+
+    // Create Confluence client
+    const client = new ConfluenceClient(baseUrl, email, apiToken);
+
+    // Test connection first (silently)
+    const connected = await client.testConnection();
+    if (!connected) {
+      return; // Silently fail
+    }
+
+    // Find or create the "Daily Notes" parent page
+    const dailyNotesParentId = await client.findOrCreateParentPage(
+      spaceKey,
+      'Daily Notes',
+      parentPageId || undefined
+    );
+
+    // Get all monthly notes files
+    const files = await getAllMonthlyNotesFiles();
+    if (files.length === 0) {
+      return;
+    }
+
+    const syncedPages = [];
+
+    // Sync each file
+    for (const filePath of files) {
+      const fileName = path.basename(filePath, '.html');
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      // Extract the month/year from content
+      const firstLine = content.split('\n')[0];
+      const titleMatch = firstLine.match(/^<h1>(.+)<\/h1>$/);
+      const pageTitle = titleMatch ? titleMatch[1] : fileName;
+
+      try {
+        const confluenceContent = content;
+
+        // Create or update page
+        const result = await client.createOrUpdatePage(
+          spaceKey,
+          pageTitle,
+          confluenceContent,
+          dailyNotesParentId
+        );
+
+        syncedPages.push({
+          title: pageTitle,
+          id: result.page.id
+        });
+      } catch (error) {
+        // Silently ignore errors in auto-sync
+      }
+    }
+
+    // Update parent page with links
+    if (syncedPages.length > 0) {
+      try {
+        await client.updateParentPageLinks(spaceKey, 'Daily Notes', syncedPages);
+      } catch (error) {
+        // Silently ignore errors
+      }
+    }
+  } catch (error) {
+    // Silently ignore all errors in auto-sync
+  }
+}
+
+/**
+ * Performs sync based on user's silentSync configuration setting
+ * If silentSync is true, syncs silently in the background
+ * If silentSync is false or not set, shows verbose sync output
+ * @returns {Promise<void>}
+ */
+export async function performAutoSync() {
+  try {
+    const config = await getConfig();
+
+    // Check if Confluence is configured and enabled
+    if (!config || !config.confluence || !config.confluence.enabled) {
+      return; // Skip if not configured
+    }
+
+    // Check silentSync setting - default to false (verbose) if not set
+    const silentSync = config.confluence.silentSync === true;
+
+    if (silentSync) {
+      await autoSyncToConfluence();
+    } else {
+      await syncToConfluence();
+    }
+  } catch (error) {
+    // Silently ignore errors
+  }
+}
+
+/**
  * Syncs all monthly notes files to Confluence
  * @returns {Promise<void>}
  */
