@@ -639,6 +639,219 @@ export function getAllContexts(sectionContent) {
 }
 
 /**
+ * Extracts notes from a section content
+ * @param {string} sectionContent - The section content to extract notes from
+ * @returns {Array<{text: string, timestamp: string, lineNumber: number}>} Array of note items
+ */
+export function extractNotes(sectionContent) {
+  const lines = sectionContent.split('\n');
+  const notes = [];
+  let inNotesSection = false;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line === '<h3>Notes</h3>') {
+      inNotesSection = true;
+      i++;
+      continue;
+    }
+
+    if (line.startsWith('<h3>') && line !== '<h3>Notes</h3>') {
+      inNotesSection = false;
+      break;
+    }
+
+    if (inNotesSection && line.trim()) {
+      // Check for timestamp pattern
+      const timestampMatch = line.match(/<p style="color: #888; font-size: 0\.85em; margin-bottom: 5px;">(.+?)<\/p>/);
+
+      if (timestampMatch && i + 1 < lines.length) {
+        const timestamp = timestampMatch[1];
+        const nextLine = lines[i + 1];
+
+        // Check if next line is the note content
+        if (nextLine.startsWith('<p>') && !nextLine.includes('style=')) {
+          const text = nextLine.replace(/<p>|<\/p>/g, '').trim();
+          notes.push({
+            text,
+            timestamp,
+            lineNumber: i
+          });
+          i += 2; // Skip both timestamp and content lines
+          continue;
+        }
+      } else if (line.startsWith('<p>') && !line.includes('style=')) {
+        // Note without timestamp
+        const text = line.replace(/<p>|<\/p>/g, '').trim();
+        if (text) {
+          notes.push({
+            text,
+            timestamp: null,
+            lineNumber: i
+          });
+        }
+      }
+    }
+
+    i++;
+  }
+
+  return notes;
+}
+
+/**
+ * Extracts references from a section content
+ * @param {string} sectionContent - The section content to extract references from
+ * @returns {Array<{id: string, content: string, timestamp: string, lineNumber: number}>} Array of reference items
+ */
+export function extractReferences(sectionContent) {
+  const lines = sectionContent.split('\n');
+  const references = [];
+  let inReferencesSection = false;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line === '<h3>References</h3>') {
+      inReferencesSection = true;
+      i++;
+      continue;
+    }
+
+    if (line.startsWith('<h3>') && line !== '<h3>References</h3>') {
+      inReferencesSection = false;
+      break;
+    }
+
+    if (inReferencesSection && line.trim()) {
+      // Check for timestamp pattern
+      const timestampMatch = line.match(/<p style="color: #888; font-size: 0\.85em; margin-bottom: 5px;">(.+?)<\/p>/);
+
+      if (timestampMatch && i + 1 < lines.length) {
+        const timestamp = timestampMatch[1];
+        const nextLine = lines[i + 1];
+
+        // Check if next line is the reference macro
+        const refMatch = nextLine.match(/<ac:structured-macro ac:name="code" data-ref-id="([^"]+)"><ac:parameter ac:name="title">\[([^\]]+)\]<\/ac:parameter><ac:plain-text-body><!\[CDATA\[(.+?)\]\]><\/ac:plain-text-body><\/ac:structured-macro>/);
+
+        if (refMatch) {
+          references.push({
+            id: refMatch[2],
+            content: refMatch[3],
+            timestamp,
+            lineNumber: i
+          });
+          i += 2;
+          continue;
+        }
+      } else {
+        // Reference without timestamp
+        const refMatch = line.match(/<ac:structured-macro ac:name="code" data-ref-id="([^"]+)"><ac:parameter ac:name="title">\[([^\]]+)\]<\/ac:parameter><ac:plain-text-body><!\[CDATA\[(.+?)\]\]><\/ac:plain-text-body><\/ac:structured-macro>/);
+
+        if (refMatch) {
+          references.push({
+            id: refMatch[2],
+            content: refMatch[3],
+            timestamp: null,
+            lineNumber: i
+          });
+        }
+      }
+    }
+
+    i++;
+  }
+
+  return references;
+}
+
+/**
+ * Deletes a note at the specified line number
+ * @param {string} sectionContent - The section content
+ * @param {number} lineNumber - The line number to delete
+ * @returns {string} The updated section content
+ */
+export function deleteNoteInSection(sectionContent, lineNumber) {
+  const lines = sectionContent.split('\n');
+
+  // Check if this line has a timestamp (delete both lines)
+  if (lines[lineNumber].includes('style="color: #888')) {
+    lines.splice(lineNumber, 2); // Delete timestamp and note
+  } else {
+    lines.splice(lineNumber, 1); // Delete just the note
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Deletes a reference at the specified line number
+ * @param {string} sectionContent - The section content
+ * @param {number} lineNumber - The line number to delete
+ * @returns {string} The updated section content
+ */
+export function deleteReferenceInSection(sectionContent, lineNumber) {
+  const lines = sectionContent.split('\n');
+
+  // Check if this line has a timestamp (delete both lines)
+  if (lines[lineNumber].includes('style="color: #888')) {
+    lines.splice(lineNumber, 2); // Delete timestamp and reference
+  } else {
+    lines.splice(lineNumber, 1); // Delete just the reference
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Updates a note at the specified line number
+ * @param {string} sectionContent - The section content
+ * @param {number} lineNumber - The line number to update
+ * @param {string} newText - The new note text
+ * @returns {string} The updated section content
+ */
+export function updateNoteInSection(sectionContent, lineNumber, newText) {
+  const lines = sectionContent.split('\n');
+
+  // Check if this line has a timestamp
+  if (lines[lineNumber].includes('style="color: #888')) {
+    // Update the next line (the actual content)
+    lines[lineNumber + 1] = `<p>${newText}</p>`;
+  } else {
+    // Update this line
+    lines[lineNumber] = `<p>${newText}</p>`;
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Updates a reference at the specified line number
+ * @param {string} sectionContent - The section content
+ * @param {number} lineNumber - The line number to update
+ * @param {string} refId - The reference ID
+ * @param {string} newContent - The new reference content
+ * @returns {string} The updated section content
+ */
+export function updateReferenceInSection(sectionContent, lineNumber, refId, newContent) {
+  const lines = sectionContent.split('\n');
+
+  // Check if this line has a timestamp
+  if (lines[lineNumber].includes('style="color: #888')) {
+    // Update the next line (the actual reference)
+    lines[lineNumber + 1] = `<ac:structured-macro ac:name="code" data-ref-id="${refId}"><ac:parameter ac:name="title">[${refId}]</ac:parameter><ac:plain-text-body><![CDATA[${newContent}]]></ac:plain-text-body></ac:structured-macro>`;
+  } else {
+    // Update this line
+    lines[lineNumber] = `<ac:structured-macro ac:name="code" data-ref-id="${refId}"><ac:parameter ac:name="title">[${refId}]</ac:parameter><ac:plain-text-body><![CDATA[${newContent}]]></ac:plain-text-body></ac:structured-macro>`;
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Gets all monthly notes files in the notes directory
  * @returns {Promise<string[]>} Array of file paths for monthly notes
  */

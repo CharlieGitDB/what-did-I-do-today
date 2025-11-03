@@ -8,6 +8,8 @@
 import { Command } from 'commander';
 import { addTodo } from '../commands/addTodo.js';
 import { listTodos } from '../commands/listTodos.js';
+import { listNotes } from '../commands/listNotes.js';
+import { listRefs } from '../commands/listRefs.js';
 import { addRef } from '../commands/addRef.js';
 import { addNote } from '../commands/addNote.js';
 import { configureConfluence } from '../commands/confluence.js';
@@ -19,63 +21,70 @@ program
   .name('wdidt')
   .description('What Did I Do Today - A personal daily notes CLI')
   .version('1.0.0')
-  .argument('[text...]', 'Todo text (if no subcommand, adds a todo)')
+  .action(() => {
+    program.help();
+  });
+
+program
+  .command('todo [text...]')
+  .description('Add a todo or manage todos interactively')
   .option('-c, --context <text>', 'Context for the todo')
   .action((text, options) => {
-    // If no arguments and no context flag, show help
-    if ((!text || text.length === 0) && !options.context) {
-      program.help();
-    }
-
-    // Default action: add a todo
-    if (text && text.length > 0) {
+    // If no text provided, show interactive todos list
+    if (!text || text.length === 0) {
+      listTodos();
+    } else {
+      // Add a todo
       // Check if last argument looks like context (if no --context flag)
-      // wdidt "todo" "context" - first arg is todo, second is context
+      // wdidt todo "todo text" "context" - first arg is todo, second is context
       if (!options.context && text.length === 2) {
         addTodo(text[0], text[1]);
       } else {
         // wdidt todo text here --context context
         addTodo(text.join(' '), options.context);
       }
-    } else {
-      addTodo('', options.context);
     }
   });
 
 program
-  .command('add')
-  .description('Add a todo item to today\'s notes')
-  .argument('[text...]', 'Todo text (optional, will prompt if not provided)')
-  .option('-c, --context <text>', 'Context for the todo')
-  .action((text, options) => {
-    // Check if we have exactly 2 arguments and no --context flag
-    if (!options.context && text.length === 2) {
-      addTodo(text[0], text[1]);
+  .command('note [text...]')
+  .description('Add a note or manage notes interactively')
+  .action((text) => {
+    // If no text provided, show interactive notes list
+    if (!text || text.length === 0) {
+      listNotes();
     } else {
-      addTodo(text.join(' '), options.context);
+      addNote(text.join(' '));
     }
   });
 
+program
+  .command('ref [text...]')
+  .description('Add a reference or manage references interactively')
+  .action((text) => {
+    // If no text provided, show interactive refs list
+    if (!text || text.length === 0) {
+      listRefs();
+    } else {
+      addRef(text.join(' '));
+    }
+  });
+
+// Legacy aliases for backwards compatibility
 program
   .command('todos')
-  .description('View, toggle, edit, and delete todos for today')
+  .description('Alias for: wdidt todo')
   .action(listTodos);
 
 program
-  .command('ref')
-  .description('Save a reference with a unique 3-word ID')
-  .argument('[text...]', 'Reference content (optional, will prompt if not provided)')
-  .action((text) => {
-    addRef(text.join(' '));
-  });
+  .command('notes')
+  .description('Alias for: wdidt note')
+  .action(listNotes);
 
 program
-  .command('note')
-  .description('Add a quick note')
-  .argument('[text...]', 'Note content (optional, will prompt if not provided)')
-  .action((text) => {
-    addNote(text.join(' '));
-  });
+  .command('refs')
+  .description('Alias for: wdidt ref')
+  .action(listRefs);
 
 program
   .command('confluence')
