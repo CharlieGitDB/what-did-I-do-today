@@ -6,6 +6,30 @@ import { ConfluenceClient } from '../utils/confluenceClient.js';
 import path from 'path';
 
 /**
+ * Converts filename format (YYYY-MM-notes) to page title format (Month YYYY)
+ * @param {string} fileName - The filename without extension (e.g., "2025-11-notes")
+ * @returns {string} The formatted title (e.g., "November 2025")
+ */
+function generatePageTitle(fileName) {
+  // Try to extract YYYY-MM from filename
+  const match = fileName.match(/^(\d{4})-(\d{2})-notes$/);
+  if (!match) {
+    return fileName; // Fallback to filename if format doesn't match
+  }
+
+  const year = match[1];
+  const monthNum = parseInt(match[2], 10);
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const monthName = monthNames[monthNum - 1] || 'Unknown';
+  return `${monthName} ${year}`;
+}
+
+/**
  * Silently syncs notes to Confluence if enabled
  * Used for automatic background syncing after operations
  * @returns {Promise<void>}
@@ -50,10 +74,8 @@ export async function autoSyncToConfluence() {
       const fileName = path.basename(filePath, '.html');
       const content = fs.readFileSync(filePath, 'utf-8');
 
-      // Extract the month/year from content
-      const firstLine = content.split('\n')[0];
-      const titleMatch = firstLine.match(/^<h1>(.+)<\/h1>$/);
-      const pageTitle = titleMatch ? titleMatch[1] : fileName;
+      // Generate page title from filename (e.g., "2025-11-notes" -> "November 2025")
+      const pageTitle = generatePageTitle(fileName);
 
       try {
         const confluenceContent = content;
@@ -177,10 +199,8 @@ export async function syncToConfluence() {
       const fileName = path.basename(filePath, '.html');
       const content = fs.readFileSync(filePath, 'utf-8');
 
-      // Extract the month/year from content (first line should be <h1>Month Year</h1>)
-      const firstLine = content.split('\n')[0];
-      const titleMatch = firstLine.match(/^<h1>(.+)<\/h1>$/);
-      const pageTitle = titleMatch ? titleMatch[1] : fileName;
+      // Generate page title from filename (e.g., "2025-11-notes" -> "November 2025")
+      const pageTitle = generatePageTitle(fileName);
 
       try {
         // Files are already in Confluence XHTML format, use content directly
