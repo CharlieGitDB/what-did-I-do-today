@@ -79,10 +79,9 @@ export async function readNotesFile() {
   const notesFile = await getNotesFilePath();
 
   if (!fs.existsSync(notesFile)) {
-    // Create new monthly file with header
-    const monthYearHeader = `<h1>${getMonthYearDisplay()}</h1>\n\n`;
-    await writeNotesFile(monthYearHeader);
-    return monthYearHeader;
+    // Create new monthly file (empty)
+    await writeNotesFile('');
+    return '';
   }
 
   return fs.readFileSync(notesFile, 'utf-8');
@@ -119,7 +118,7 @@ export function getTodaySection(content) {
   for (let i = 0; i < lines.length; i++) {
     if (lines[i] === `<h2>${today}</h2>`) {
       startIdx = i;
-    } else if (startIdx !== -1 && lines[i].startsWith('<h2>') && i > startIdx) {
+    } else if (startIdx !== -1 && (lines[i].startsWith('<h2>') || lines[i].startsWith('<hr')) && i > startIdx) {
       endIdx = i;
       break;
     }
@@ -147,21 +146,12 @@ export async function initializeTodaySection() {
   if (!todaySection) {
     const newSection = `<h2>${today}</h2>\n\n<h3>Todos</h3>\n<ac:task-list>\n</ac:task-list>\n\n<h3>Context</h3>\n\n<h3>References</h3>\n\n<h3>Notes</h3>\n<p></p>\n\n`;
 
-    // Get the monthly header
-    const monthHeader = `<h1>${getMonthYearDisplay()}</h1>\n\n`;
-
-    // Check if content already has the monthly header
-    const hasMonthHeader = content.startsWith(monthHeader) || content.startsWith(`<h1>${getMonthYearDisplay()}</h1>`);
-
-    if (content.trim() && hasMonthHeader) {
-      // Append to existing monthly file
-      await writeNotesFile(content + '\n' + newSection);
-    } else if (content.trim() && !hasMonthHeader) {
-      // Prepend monthly header if missing
-      await writeNotesFile(monthHeader + newSection);
+    if (content.trim()) {
+      // Insert new section at the top with HR separator
+      await writeNotesFile(newSection + '<hr>\n\n' + content);
     } else {
-      // New file, just write the section
-      await writeNotesFile(monthHeader + newSection);
+      // New file, just write the section (no HR needed)
+      await writeNotesFile(newSection);
     }
 
     return newSection;
