@@ -2,3 +2,13 @@ node_modules/
 *.log
 .DS_Store
 .env
+
+# Config files with sensitive data
+.wdidt/
+config.json
+
+# SSH keys
+.git/ssh/
+*.pem
+id_rsa*
+id_ed25519*
