@@ -1,15 +1,17 @@
 # wdidt - What Did I Do Today
 
-A personal CLI tool for managing daily notes with todos, useful information, and scratch notes.
+A personal CLI tool for managing daily notes with todos, references, and notes. Features interactive vim-style management and optional Confluence sync.
 
 ## Features
 
-- **Daily Notes**: Automatically creates dated sections for each day
-- **Todo Management**: Add, toggle, edit, and delete todos with an interactive interface
-- **References**: Save commands, snippets, and useful info with unique 3-word identifiers for easy searching
-- **Quick Notes**: Jot down random thoughts and scratch notes
-- **Custom Directory**: Choose where to save your notes on first run
-- **Markdown Format**: All notes saved in a clean markdown format
+- **Daily Notes**: Automatically creates dated sections for each day (sorted by most recent)
+- **Interactive Todo Management**: Add, toggle, edit, and delete todos with vim-style navigation
+- **Interactive Notes Management**: Add, view, edit, and delete notes with timestamps
+- **Interactive References Management**: Add, view, edit, and delete references with unique IDs
+- **Context Support**: Add detailed context to any todo item
+- **Confluence Sync**: Optional automatic or manual sync to Confluence with silent mode
+- **HTML/XHTML Format**: Notes stored in Confluence-compatible format
+- **Custom Directory**: Choose where to save your notes
 
 ## Installation
 
@@ -27,116 +29,123 @@ npm link
 
 ## Usage
 
-### Add a Todo
-```bash
-wdidt add "Buy groceries"
-```
-or without text to be prompted:
-```bash
-wdidt add
-```
-Adds a new todo item for today. If you provide text after the command, it will be added directly. Otherwise, you'll be prompted to enter the todo.
+### Todo Management
 
-#### Adding Context to Todos
-
-You can add context/notes to any todo to provide additional details:
-
-**Option 1: Add context via flag**
+**Quick add a todo:**
 ```bash
-wdidt add "Deploy to production" --context "Make sure to backup database first"
+wdidt todo "Deploy to production"
 ```
 
-**Option 2: Add context when prompted**
-After adding a todo, you'll be asked if you want to add context.
-
-**Option 3: Add context later**
-Use `wdidt todos` to select a todo and add context to it later.
-
-### Manage Todos (View, Toggle, Edit, Delete, Context)
+**Add todo with context:**
 ```bash
-wdidt todos
+wdidt todo "Deploy to production" "Backup database first"
+# or
+wdidt todo "Deploy to production" --context "Backup database first"
 ```
-Interactive todo management:
-1. **Toggle todos**: Use checkboxes to mark todos as complete/incomplete (space to toggle, enter to continue)
-2. **Edit or delete**: Select any todo to:
-   - Edit the todo text
-   - Delete the todo entirely
-   - **View context**: See the context/notes for a todo (shown with 📎 icon)
-   - **Add context**: Add context to a todo that doesn't have one
-   - **Edit context**: Update existing context
-   - **Delete context**: Remove context from a todo
 
-### Save a Reference
+**Interactive todo manager:**
+```bash
+wdidt todo
+# or
+wdidt todos    # legacy alias
+```
+
+Interactive controls:
+- `j/k` or `↑/↓` - Navigate
+- `SPACE` - Toggle complete/incomplete
+- `e` - Edit todo text
+- `d` - Delete todo
+- `c` - Manage context (view/add/edit/delete)
+- `a` - Add new todo
+- `ESC` - Exit
+
+### Notes Management
+
+**Quick add a note:**
+```bash
+wdidt note "Remember to check the deployment logs"
+```
+
+**Interactive notes manager:**
+```bash
+wdidt note
+# or
+wdidt notes    # legacy alias
+```
+
+Interactive controls:
+- `j/k` or `↑/↓` - Navigate
+- `e` - Edit note
+- `d` - Delete note
+- `a` - Add new note
+- `ESC` - Exit
+
+Notes include timestamps (e.g., "2:30 PM") for tracking when they were added.
+
+### References Management
+
+**Quick add a reference:**
 ```bash
 wdidt ref "curl -X POST https://api.example.com/endpoint"
 ```
-or without text to be prompted:
+
+**Interactive references manager:**
 ```bash
 wdidt ref
+# or
+wdidt refs    # legacy alias
 ```
-Saves a reference with a unique 3-word identifier (e.g., "quick-runs-fox"). Perfect for commands, snippets, or any information you want to easily find later by searching for the identifier.
 
-### Add a Quick Note
-```bash
-wdidt note "remember to check on that deployment"
-```
-or without text to be prompted:
-```bash
-wdidt note
-```
-Adds a quick note or random thought to your daily notes.
+Interactive controls:
+- `j/k` or `↑/↓` - Navigate
+- `v` - View full reference content
+- `e` - Edit reference
+- `d` - Delete reference
+- `a` - Add new reference
+- `ESC` - Exit
+
+References are assigned unique numeric IDs (e.g., `[1]`, `[2]`) and include timestamps.
 
 ## Notes Format
 
-Notes are organized by month in separate files (e.g., `2024-10-notes.md`). Each monthly file contains:
+Notes are organized by month in HTML files (e.g., `2025-11-notes.html`). Files use Confluence XHTML format:
 
-```markdown
-# October 2024
+```html
+<h2>Monday, November 3, 2025</h2>
 
-## Thursday, October 31, 2024
+<h3>Todos</h3>
+<ac:task-list>
+<ac:task><ac:task-id>1</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">Deploy to production</span></ac:task-body></ac:task>
+<ac:task><ac:task-id>2</ac:task-id><ac:task-status>complete</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">Update documentation</span></ac:task-body></ac:task>
+</ac:task-list>
 
-### Todos
+<h3>Context</h3>
+<ac:structured-macro ac:name="info">
+<ac:parameter ac:name="title">Context for Todo #1</ac:parameter>
+<ac:rich-text-body>
+<p>Backup database first and notify the team</p>
+</ac:rich-text-body>
+</ac:structured-macro>
 
-- [ ] Deploy to production [context: calm-thinks-moon]
-- [x] Update documentation
-- [ ] Review pull requests
+<h3>References</h3>
+<p style="color: #888; font-size: 0.85em; margin-bottom: 5px;">2:30 PM</p>
+<p><strong>[1]</strong> curl -X POST https://api.example.com/endpoint</p>
 
-### Context
+<h3>Notes</h3>
+<p style="color: #888; font-size: 0.85em; margin-bottom: 5px;">2:30 PM</p>
+<p>Remember to check the deployment logs</p>
 
-**[calm-thinks-moon]**
-Make sure to backup database first and notify the team
+<hr>
 
-### References
-
-#ref [quick-runs-fox]
-curl -X POST https://api.example.com/endpoint
-#/ref
-
-#ref [bright-thinks-star]
-docker ps --format 'table {{.Names}}\t{{.Status}}'
-#/ref
-
-### Notes
-
-remember to check on that deployment
-
-random thought about the project architecture
-
-## Friday, November 1, 2024
-
-### Todos
+<h2>Sunday, November 2, 2025</h2>
 ...
 ```
 
-**File Structure:**
-- `#` = Month and year header (October 2024)
-- `##` = Daily entries (Thursday, October 31, 2024)
-- `###` = Sections (Todos, Context, References, Notes)
-
-**Monthly Files:**
-When a new month starts, a new file is automatically created (e.g., `2024-11-notes.md`). This keeps your notes organized and prevents any single file from becoming too large.
-
-Todos can reference context using unique 3-word identifiers (e.g., `[context: calm-thinks-moon]`). The context details are stored in the Context section, keeping your todos clean while maintaining detailed information.
+**File Organization:**
+- Monthly files: `YYYY-MM-notes.html` (e.g., `2025-11-notes.html`)
+- Most recent date appears first
+- Days separated by `<hr>` horizontal rules
+- New month = new file automatically
 
 ## Confluence Sync
 
@@ -144,41 +153,90 @@ Sync your daily notes to Confluence for easy sharing and collaboration.
 
 ### Setup Confluence Sync
 
-**First-time setup:**
-During initial configuration, you'll be asked if you want to sync to Confluence.
-
-**Configure later:**
+**Configure Confluence:**
 ```bash
 wdidt confluence
 ```
 
-**Steps:**
+**Required information:**
 1. Create a Confluence API token at: https://id.atlassian.com/manage-profile/security/api-tokens
-2. Run `wdidt confluence` and provide:
+2. Provide:
    - Confluence URL (e.g., https://yourcompany.atlassian.net)
    - Your email
    - API token
    - Space key where notes will be synced
    - (Optional) Parent page ID
+   - Silent sync preference (yes = background sync, no = verbose output)
 
 ### Sync Notes
 
+**Manual sync:**
 ```bash
 wdidt sync
 ```
 
-This will:
-- Convert all monthly notes files to Confluence format
-- Create new pages or update existing ones
-- Maintain your notes structure in Confluence
-- Show a summary of created/updated pages
+**Auto-sync:**
+Auto-sync runs automatically after these commands (if enabled):
+- `wdidt todo "text"`
+- `wdidt note "text"`
+- `wdidt ref "text"`
+- Exiting interactive managers (`wdidt todo`, `wdidt note`, `wdidt ref`)
 
-**Page naming:** Files are synced as "Daily Notes - Month Year" (e.g., "Daily Notes - October 2025")
+**Silent sync mode:**
+If enabled in configuration, syncs happen silently in the background. Otherwise, shows detailed output with created/updated page counts.
+
+**Page naming:** Pages appear in Confluence as "Month YYYY" (e.g., "November 2025")
+
+### Test Confluence Connection
+
+```bash
+wdidt test-confluence
+wdidt test-confluence --debug    # Show auth details
+```
+
+Tests authentication and space access to verify your configuration.
+
+## Configuration
+
+Configuration is stored in `~/.wdidt/config.json`:
+
+```json
+{
+  "notesDirectory": "C:\\Users\\username\\Documents\\daily-notes",
+  "confluence": {
+    "enabled": true,
+    "baseUrl": "https://yourcompany.atlassian.net",
+    "email": "you@example.com",
+    "apiToken": "your-api-token",
+    "spaceKey": "YOURSPACE",
+    "parentPageId": "123456789",
+    "silentSync": false
+  }
+}
+```
+
+**Important:** The config file contains sensitive data (API tokens) and is automatically excluded from git.
+
+## Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `wdidt todo [text]` | Add todo (or open interactive manager) |
+| `wdidt note [text]` | Add note (or open interactive manager) |
+| `wdidt ref [text]` | Add reference (or open interactive manager) |
+| `wdidt confluence` | Configure Confluence sync settings |
+| `wdidt sync` | Manually sync notes to Confluence |
+| `wdidt test-confluence` | Test Confluence connection |
+| `wdidt todos` | Alias for `wdidt todo` |
+| `wdidt notes` | Alias for `wdidt note` |
+| `wdidt refs` | Alias for `wdidt ref` |
 
 ## TypeScript Support
 
 All files include JSDoc comments for IDE type checking and IntelliSense support.
 
-## Configuration
+## Security
 
-Configuration is stored in `~/.wdidt/config.json`. The notes directory path and Confluence settings can be changed by editing this file or running the respective configuration commands.
+- Config file (`~/.wdidt/config.json`) is stored outside the repository
+- SSH keys (`.git/ssh/`) are git-ignored
+- Sensitive data is never committed to version control
