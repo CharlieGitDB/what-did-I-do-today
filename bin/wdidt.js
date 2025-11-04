@@ -71,22 +71,6 @@ program
     }
   });
 
-// Legacy aliases for backwards compatibility
-program
-  .command('todos')
-  .description('Alias for: wdidt todo')
-  .action(listTodos);
-
-program
-  .command('notes')
-  .description('Alias for: wdidt note')
-  .action(listNotes);
-
-program
-  .command('refs')
-  .description('Alias for: wdidt ref')
-  .action(listRefs);
-
 program
   .command('confluence')
   .description('Configure Confluence sync settings')
