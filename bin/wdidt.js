@@ -14,6 +14,7 @@ import { addRef } from '../commands/addRef.js';
 import { addNote } from '../commands/addNote.js';
 import { configureConfluence } from '../commands/confluence.js';
 import { syncToConfluence } from '../commands/sync.js';
+import { carryoverTodos } from '../commands/carryover.js';
 
 const program = new Command();
 
@@ -95,6 +96,11 @@ program
   .command('sync')
   .description('Sync all notes to Confluence')
   .action(syncToConfluence);
+
+program
+  .command('carryover')
+  .description('Carry over incomplete todos from yesterday to today')
+  .action(carryoverTodos);
 
 program
   .command('test-confluence')

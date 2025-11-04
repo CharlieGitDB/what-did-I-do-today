@@ -134,6 +134,66 @@ export function getTodaySection(content) {
 }
 
 /**
+ * Gets the previous day's section from the notes content
+ * @param {string} content - The full notes file content
+ * @returns {TodaySection|null} The previous day section or null if not found
+ */
+export function getPreviousDaySection(content) {
+  const lines = content.split('\n');
+  const today = getTodayString();
+  let todayIdx = -1;
+  let previousDayStartIdx = -1;
+  let previousDayEndIdx = lines.length;
+
+  // First find today's section
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === `<h2>${today}</h2>`) {
+      todayIdx = i;
+      break;
+    }
+  }
+
+  if (todayIdx === -1) {
+    // If today doesn't exist, the first section is the previous day
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('<h2>')) {
+        previousDayStartIdx = i;
+        break;
+      }
+    }
+  } else {
+    // Find the next h2 after today (that's the previous day)
+    for (let i = todayIdx + 1; i < lines.length; i++) {
+      if (lines[i].startsWith('<hr')) {
+        continue; // Skip the HR separator
+      }
+      if (lines[i].startsWith('<h2>')) {
+        previousDayStartIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (previousDayStartIdx === -1) {
+    return null; // No previous day found
+  }
+
+  // Find the end of the previous day section
+  for (let i = previousDayStartIdx + 1; i < lines.length; i++) {
+    if (lines[i].startsWith('<h2>') || lines[i].startsWith('<hr')) {
+      previousDayEndIdx = i;
+      break;
+    }
+  }
+
+  return {
+    startIdx: previousDayStartIdx,
+    endIdx: previousDayEndIdx,
+    content: lines.slice(previousDayStartIdx, previousDayEndIdx).join('\n')
+  };
+}
+
+/**
  * Initializes today's section in the notes file
  * @returns {Promise<string>} The today section content
  */
