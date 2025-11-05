@@ -407,20 +407,16 @@ export async function addContentToSection(sectionName, content) {
     lines.push(content);
     lines.push('');
   } else {
-    // Find the last non-empty line in the section
-    let insertIdx = nextSectionIdx;
-    for (let i = nextSectionIdx - 1; i > sectionIdx; i--) {
-      if (lines[i].trim()) {
-        insertIdx = i + 1;
-        break;
-      }
-    }
+    // Prepend: insert right after the section header
+    let insertIdx = sectionIdx + 1;
 
-    if (insertIdx === sectionIdx + 1) {
-      // Section is empty
+    // Check if there's already content in the section
+    if (insertIdx < lines.length && lines[insertIdx].trim()) {
+      // There's content, insert before it with spacing
       lines.splice(insertIdx, 0, content, '');
     } else {
-      lines.splice(insertIdx, 0, '', content);
+      // Section is empty or has whitespace
+      lines.splice(insertIdx, 0, content, '');
     }
   }
 
@@ -718,7 +714,7 @@ export function extractNotes(sectionContent) {
       continue;
     }
 
-    if (line.startsWith('<h3>') && line !== '<h3>Notes</h3>') {
+    if (inNotesSection && line.startsWith('<h3>') && line !== '<h3>Notes</h3>') {
       inNotesSection = false;
       break;
     }
@@ -729,28 +725,65 @@ export function extractNotes(sectionContent) {
 
       if (timestampMatch && i + 1 < lines.length) {
         const timestamp = timestampMatch[1];
-        const nextLine = lines[i + 1];
+        let j = i + 1;
 
         // Check if next line is the note content
-        if (nextLine.startsWith('<p>') && !nextLine.includes('style=')) {
-          const text = nextLine.replace(/<p>|<\/p>/g, '').trim();
-          notes.push({
-            text,
-            timestamp,
-            lineNumber: i
-          });
-          i += 2; // Skip both timestamp and content lines
-          continue;
+        if (lines[j].startsWith('<p>') && !lines[j].includes('style=')) {
+
+          // Collect all lines until we find the closing </p>
+          const textLines = [];
+          let foundClosing = false;
+
+          while (j < lines.length) {
+            const currentLine = lines[j];
+            textLines.push(currentLine);
+
+            if (currentLine.includes('</p>')) {
+              foundClosing = true;
+              break;
+            }
+            j++;
+          }
+
+          if (foundClosing) {
+            const text = textLines.join('\n').replace(/<p>|<\/p>/g, '').trim();
+            notes.push({
+              text,
+              timestamp,
+              lineNumber: i
+            });
+            i = j + 1; // Skip to after the closing tag
+            continue;
+          }
         }
       } else if (line.startsWith('<p>') && !line.includes('style=')) {
-        // Note without timestamp
-        const text = line.replace(/<p>|<\/p>/g, '').trim();
-        if (text) {
-          notes.push({
-            text,
-            timestamp: null,
-            lineNumber: i
-          });
+        // Note without timestamp - collect multi-line content
+        const textLines = [];
+        let j = i;
+        let foundClosing = false;
+
+        while (j < lines.length) {
+          const currentLine = lines[j];
+          textLines.push(currentLine);
+
+          if (currentLine.includes('</p>')) {
+            foundClosing = true;
+            break;
+          }
+          j++;
+        }
+
+        if (foundClosing) {
+          const text = textLines.join('\n').replace(/<p>|<\/p>/g, '').trim();
+          if (text) {
+            notes.push({
+              text,
+              timestamp: null,
+              lineNumber: i
+            });
+          }
+          i = j + 1;
+          continue;
         }
       }
     }
@@ -781,7 +814,7 @@ export function extractReferences(sectionContent) {
       continue;
     }
 
-    if (line.startsWith('<h3>') && line !== '<h3>References</h3>') {
+    if (inReferencesSection && line.startsWith('<h3>') && line !== '<h3>References</h3>') {
       inReferencesSection = false;
       break;
     }

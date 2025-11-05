@@ -84,11 +84,8 @@ export async function addTodo(text, contextText) {
 
     if (todoSectionIdx !== -1 && taskListIdx === -1 && lines[i] === '<ac:task-list>') {
       taskListIdx = i;
-      continue;
-    }
-
-    if (todoSectionIdx !== -1 && lines[i] === '</ac:task-list>') {
-      insertIdx = i;
+      // Prepend: insert right after the task-list opening tag
+      insertIdx = i + 1;
       break;
     }
 
