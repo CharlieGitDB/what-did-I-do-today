@@ -487,33 +487,58 @@ async function addContextToTodoInteractive(todo, todaySection) {
   term.grabInput(true);
 
   const contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
-  await addContext(contextId, contextText);
 
-  // Fetch fresh todaySection after addContext has modified the file
+  // Fetch fresh section and do everything in one operation
   const freshTodaySection = await initializeTodaySection();
-
-  // Update the todo to link to this context
   const lines = freshTodaySection.split('\n');
-  const line = lines[todo.lineNumber];
 
-  if (line) {
-    const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task>/);
-    if (todoMatch) {
-      const todoId = todoMatch[1];
-      const status = todoMatch[2];
-      let text = todoMatch[3];
-
-      // Remove span tags if present to get clean text
-      text = text.replace(/<span[^>]*>/g, '').replace(/<\/span>/g, '');
-
-      const contextLink = ` <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a>`;
-
-      lines[todo.lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${text}${contextLink}</span></ac:task-body></ac:task>`;
+  // First, add the context to the Context section
+  let contextSectionIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === '<h3>Context</h3>') {
+      contextSectionIdx = i;
+      break;
     }
   }
 
+  if (contextSectionIdx !== -1) {
+    // Insert context right after the Context header
+    const formattedContext = `<ac:structured-macro ac:name="info" ac:schema-version="1"><ac:parameter ac:name="title">[${contextId}]</ac:parameter><ac:rich-text-body><p>${contextText}</p></ac:rich-text-body></ac:structured-macro>`;
+    let insertIdx = contextSectionIdx + 1;
+
+    // Check if there's already content
+    if (insertIdx < lines.length && lines[insertIdx].trim()) {
+      lines.splice(insertIdx, 0, formattedContext, '');
+    } else {
+      lines.splice(insertIdx, 0, formattedContext, '');
+    }
+  }
+
+  // Now find and update the todo to link to this context
+  const freshTodos = extractTodos(lines.join('\n'));
+  const freshTodo = freshTodos.find(t => t.todoId === todo.todoId);
+
+  if (freshTodo) {
+    const line = lines[freshTodo.lineNumber];
+    if (line) {
+      const todoMatch = line.match(/<ac:task><ac:task-id>(\d+)<\/ac:task-id><ac:task-status>(complete|incomplete)<\/ac:task-status><ac:task-body>(.+?)<\/ac:task-body><\/ac:task>/);
+      if (todoMatch) {
+        const todoId = todoMatch[1];
+        const status = todoMatch[2];
+        let text = todoMatch[3];
+
+        // Remove span tags if present to get clean text
+        text = text.replace(/<span[^>]*>/g, '').replace(/<\/span>/g, '');
+
+        const contextLink = ` <a href="#context-${contextId}" style="color: #0066cc;">📎 ${contextId}</a>`;
+
+        lines[freshTodo.lineNumber] = `<ac:task><ac:task-id>${todoId}</ac:task-id><ac:task-status>${status}</ac:task-status><ac:task-body><span class="placeholder-inline-tasks">${text}${contextLink}</span></ac:task-body></ac:task>`;
+      }
+    }
+  }
+
+  // Write everything in one operation
   await replaceTodaySection(lines.join('\n'));
-  // Context will be re-extracted on next loop iteration
 }
 
 /**
