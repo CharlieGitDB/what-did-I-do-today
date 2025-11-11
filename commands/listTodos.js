@@ -489,8 +489,11 @@ async function addContextToTodoInteractive(todo, todaySection) {
   const contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
   await addContext(contextId, contextText);
 
+  // Fetch fresh todaySection after addContext has modified the file
+  const freshTodaySection = await initializeTodaySection();
+
   // Update the todo to link to this context
-  const lines = todaySection.split('\n');
+  const lines = freshTodaySection.split('\n');
   const line = lines[todo.lineNumber];
 
   if (line) {
