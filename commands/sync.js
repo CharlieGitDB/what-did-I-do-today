@@ -1,7 +1,7 @@
 import fs from 'fs';
 import chalk from 'chalk';
 import { getConfig } from '../utils/config.js';
-import { getAllMonthlyNotesFiles } from '../utils/fileHandler.js';
+import { getAllMonthlyNotesFiles, getNotesFilePath } from '../utils/fileHandler.js';
 import { ConfluenceClient } from '../utils/confluenceClient.js';
 import path from 'path';
 
@@ -30,7 +30,64 @@ function generatePageTitle(fileName) {
 }
 
 /**
- * Silently syncs notes to Confluence if enabled
+ * Syncs only the current month's notes file to Confluence
+ * @param {ConfluenceClient} client - The Confluence client
+ * @param {string} spaceKey - The Confluence space key
+ * @param {string} parentPageId - The parent page ID (optional)
+ * @param {boolean} verbose - Whether to show console output
+ * @returns {Promise<void>}
+ */
+async function syncCurrentMonth(client, spaceKey, parentPageId, verbose) {
+  // Find or create the "Daily Notes" parent page
+  if (verbose) console.log(chalk.gray('Setting up Daily Notes folder...\n'));
+  const dailyNotesParentId = await client.findOrCreateParentPage(
+    spaceKey,
+    'Daily Notes',
+    parentPageId || undefined
+  );
+
+  // Get current month's file
+  const filePath = await getNotesFilePath();
+  if (!fs.existsSync(filePath)) {
+    if (verbose) console.log(chalk.yellow('No notes file found for the current month.\n'));
+    return;
+  }
+
+  const fileName = path.basename(filePath, '.html');
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const pageTitle = generatePageTitle(fileName);
+
+  const result = await client.createOrUpdatePage(
+    spaceKey,
+    pageTitle,
+    content,
+    dailyNotesParentId
+  );
+
+  if (verbose) {
+    if (result.action === 'created') {
+      console.log(chalk.green(`✓ Created: ${pageTitle}`));
+    } else {
+      console.log(chalk.blue(`✓ Updated: ${pageTitle}`));
+    }
+  }
+
+  // Update parent page links with the synced page
+  try {
+    if (verbose) console.log(chalk.gray('\nUpdating Daily Notes page with links...\n'));
+    await client.updateParentPageLinks(spaceKey, 'Daily Notes', [{
+      title: pageTitle,
+      id: result.page.id
+    }]);
+  } catch (error) {
+    if (verbose) console.log(chalk.yellow(`⚠ Could not update parent page links: ${error.message}\n`));
+  }
+
+  if (verbose) console.log(chalk.green('\n🎉 Current month synced successfully!\n'));
+}
+
+/**
+ * Silently syncs current month's notes to Confluence if enabled
  * Used for automatic background syncing after operations
  * @returns {Promise<void>}
  */
@@ -54,57 +111,7 @@ export async function autoSyncToConfluence() {
       return; // Silently fail
     }
 
-    // Find or create the "Daily Notes" parent page
-    const dailyNotesParentId = await client.findOrCreateParentPage(
-      spaceKey,
-      'Daily Notes',
-      parentPageId || undefined
-    );
-
-    // Get all monthly notes files
-    const files = await getAllMonthlyNotesFiles();
-    if (files.length === 0) {
-      return;
-    }
-
-    const syncedPages = [];
-
-    // Sync each file
-    for (const filePath of files) {
-      const fileName = path.basename(filePath, '.html');
-      const content = fs.readFileSync(filePath, 'utf-8');
-
-      // Generate page title from filename (e.g., "2025-11-notes" -> "November 2025")
-      const pageTitle = generatePageTitle(fileName);
-
-      try {
-        const confluenceContent = content;
-
-        // Create or update page
-        const result = await client.createOrUpdatePage(
-          spaceKey,
-          pageTitle,
-          confluenceContent,
-          dailyNotesParentId
-        );
-
-        syncedPages.push({
-          title: pageTitle,
-          id: result.page.id
-        });
-      } catch (error) {
-        // Silently ignore errors in auto-sync
-      }
-    }
-
-    // Update parent page with links
-    if (syncedPages.length > 0) {
-      try {
-        await client.updateParentPageLinks(spaceKey, 'Daily Notes', syncedPages);
-      } catch (error) {
-        // Silently ignore errors
-      }
-    }
+    await syncCurrentMonth(client, spaceKey, parentPageId, false);
   } catch (error) {
     // Silently ignore all errors in auto-sync
   }
@@ -125,13 +132,26 @@ export async function performAutoSync() {
       return; // Skip if not configured
     }
 
+    const { baseUrl, email, apiToken, spaceKey, parentPageId } = config.confluence;
+    const client = new ConfluenceClient(baseUrl, email, apiToken);
+
     // Check silentSync setting - default to false (verbose) if not set
     const silentSync = config.confluence.silentSync === true;
 
     if (silentSync) {
       await autoSyncToConfluence();
     } else {
-      await syncToConfluence();
+      // Verbose auto-sync: only sync current month
+      console.log(chalk.blue('🔄 Syncing current month to Confluence...\n'));
+
+      const connected = await client.testConnection();
+      if (!connected) {
+        console.log(chalk.red('✗ Could not connect to Confluence. Check your credentials.\n'));
+        return;
+      }
+      console.log(chalk.green('✓ Connected to Confluence successfully\n'));
+
+      await syncCurrentMonth(client, spaceKey, parentPageId, true);
     }
   } catch (error) {
     // Silently ignore errors
