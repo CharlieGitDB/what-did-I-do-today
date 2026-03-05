@@ -9,7 +9,7 @@ import {
   addContext,
   updateContext,
   deleteContext,
-  idExistsInAnyFile,
+  idExistsInCurrentMonth,
   getAllContexts,
   getTodosReferencingContext,
   getNextTodoId
@@ -321,7 +321,7 @@ async function addTodoInteractive() {
   let contextId = null;
 
   if (answers.contextText) {
-    contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
+    contextId = await generateUniqueThreeWordId(idExistsInCurrentMonth);
     await addContext(contextId, answers.contextText);
   }
 
@@ -486,7 +486,7 @@ async function addContextToTodoInteractive(todo, todaySection) {
   term.hideCursor(true);
   term.grabInput(true);
 
-  const contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
+  const contextId = await generateUniqueThreeWordId(idExistsInCurrentMonth);
 
   // Fetch fresh section and do everything in one operation
   const freshTodaySection = await initializeTodaySection();

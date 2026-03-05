@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { addContentToSection, idExistsInAnyFile } from '../utils/fileHandler.js';
+import { addContentToSection, idExistsInCurrentMonth } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 import { performAutoSync } from './sync.js';
 
@@ -29,7 +29,7 @@ export async function addRef(text) {
     content = answers.content;
   }
 
-  const refId = await generateUniqueThreeWordId(idExistsInAnyFile);
+  const refId = await generateUniqueThreeWordId(idExistsInCurrentMonth);
 
   // Get current timestamp
   const now = new Date();

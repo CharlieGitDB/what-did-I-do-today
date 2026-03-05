@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { initializeTodaySection, replaceTodaySection, addContext, idExistsInAnyFile, getNextTodoId } from '../utils/fileHandler.js';
+import { initializeTodaySection, replaceTodaySection, addContext, idExistsInCurrentMonth, getNextTodoId } from '../utils/fileHandler.js';
 import { generateUniqueThreeWordId } from '../utils/wordGenerator.js';
 import { performAutoSync } from './sync.js';
 
@@ -65,7 +65,7 @@ export async function addTodo(text, contextText) {
 
   // Generate unique context ID and add context if provided
   if (finalContextText && finalContextText.trim()) {
-    contextId = await generateUniqueThreeWordId(idExistsInAnyFile);
+    contextId = await generateUniqueThreeWordId(idExistsInCurrentMonth);
     await addContext(contextId, finalContextText);
   }
 

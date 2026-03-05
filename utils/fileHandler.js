@@ -462,6 +462,17 @@ export function getContextById(sectionContent, contextId) {
     if (inContextSection) {
       // Check for info panel with context ID
       if (line.includes(`<ac:parameter ac:name="title">[${contextId}]</ac:parameter>`)) {
+        // Check if this is a single-line context (contains everything on one line)
+        if (line.includes('</ac:structured-macro>')) {
+          // Extract content from rich-text-body
+          const richTextMatch = line.match(/<ac:rich-text-body>(.*?)<\/ac:rich-text-body>/);
+          if (richTextMatch) {
+            // Remove all HTML tags and return cleaned text
+            return richTextMatch[1].replace(/<[^>]+>/g, '').trim();
+          }
+          return null;
+        }
+        // Multi-line context, continue collecting
         inInfoPanel = true;
         continue;
       }
@@ -956,29 +967,25 @@ export async function getAllMonthlyNotesFiles() {
 }
 
 /**
- * Checks if an ID (context or reference) exists in any monthly notes file
+ * Checks if an ID (context or reference) exists in the current month's notes file
  * @param {string} id - The ID to check for
  * @returns {Promise<boolean>} True if the ID exists, false otherwise
  */
-export async function idExistsInAnyFile(id) {
-  const files = await getAllMonthlyNotesFiles();
+export async function idExistsInCurrentMonth(id) {
+  const content = await readNotesFile();
 
-  for (const file of files) {
-    if (fs.existsSync(file)) {
-      const content = fs.readFileSync(file, 'utf-8');
+  if (!content) return false;
 
-      // Check for context IDs: <p><strong>[id]</strong></p> or [context: id]
-      const contextRegex1 = new RegExp(`<p><strong>\\[${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]</strong></p>`);
-      const contextRegex2 = new RegExp(`\\[context: ${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`);
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      // Check for reference IDs: <ac:structured-macro ... data-ref-id="id"
-      const refRegex = new RegExp(`data-ref-id="${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`);
+  // Check for context IDs: <p><strong>[id]</strong></p> or [context: id]
+  const contextRegex1 = new RegExp(`<p><strong>\\[${escaped}\\]</strong></p>`);
+  const contextRegex2 = new RegExp(`\\[context: ${escaped}\\]`);
+  // Check for info panel context IDs
+  const contextRegex3 = new RegExp(`<ac:parameter ac:name="title">\\[${escaped}\\]</ac:parameter>`);
 
-      if (contextRegex1.test(content) || contextRegex2.test(content) || refRegex.test(content)) {
-        return true;
-      }
-    }
-  }
+  // Check for reference IDs: <ac:structured-macro ... data-ref-id="id"
+  const refRegex = new RegExp(`data-ref-id="${escaped}"`);
 
-  return false;
+  return contextRegex1.test(content) || contextRegex2.test(content) || contextRegex3.test(content) || refRegex.test(content);
 }
