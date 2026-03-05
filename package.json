@@ -1,6 +1,6 @@
 {
   "name": "wdidt",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "What Did I Do Today - A personal daily notes CLI",
   "main": "index.js",
   "type": "module",
