@@ -5,9 +5,11 @@ import {
   extractNotes,
   deleteNoteInSection,
   updateNoteInSection,
-  replaceTodaySection
+  replaceTodaySection,
+  addContentToSection
 } from '../utils/fileHandler.js';
 import { performAutoSync } from './sync.js';
+import { openEditor } from '../editor/index.js';
 
 const term = termkit.terminal;
 
@@ -35,8 +37,8 @@ async function showNotesList() {
     const notes = extractNotes(todaySection);
 
     term.clear();
-    term.cyan.bold('  📝 NOTES MANAGER\n\n');
-    term.gray('  ').white('j/k/↑↓').gray(': Navigate  ').white('e').gray(': Edit  ').white('d').gray(': Delete  ').white('a').gray(': Add  ').white('ESC').gray(': Exit\n\n');
+    term.cyan.bold('  NOTES MANAGER\n\n');
+    term.gray('  ').white('j/k').gray(': Navigate  ').white('e').gray(': Edit  ').white('d').gray(': Delete  ').white('a').gray(': Add  ').white('ESC').gray(': Exit\n\n');
 
     if (notes.length === 0) {
       term.yellow('  No notes for today!\n');
@@ -85,7 +87,7 @@ async function showNotesList() {
         selectedIndex = Math.min(notes.length - 1, selectedIndex + 1);
       }
     } else if (key === 'e' || key === 'E') {
-      // Edit note
+      // Edit note with WYSIWYG editor
       if (notes.length > 0 && selectedIndex < notes.length) {
         await editNoteInteractive(notes[selectedIndex], todaySection);
       }
@@ -98,8 +100,8 @@ async function showNotesList() {
         }
       }
     } else if (key === 'a' || key === 'A') {
-      // Add note
-      await addNoteInteractive();
+      // Add note with WYSIWYG editor
+      await addNoteWithEditor();
     } else if (key === 'ESCAPE') {
       // Exit
       running = false;
@@ -115,37 +117,28 @@ async function showNotesList() {
 }
 
 /**
- * Adds a new note interactively
+ * Adds a new note using the WYSIWYG editor
  * @returns {Promise<void>}
  */
-async function addNoteInteractive() {
+async function addNoteWithEditor() {
   term.grabInput(false);
   term.hideCursor(false);
 
-  const answers = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'noteText',
-      message: 'Enter note:',
-      validate: (input) => {
-        if (!input.trim()) {
-          return 'Note cannot be empty';
-        }
-        return true;
-      }
-    }
-  ]);
+  const html = await openEditor();
 
   term.hideCursor(true);
   term.grabInput(true);
 
-  // Import addNote command
-  const { addNote } = await import('./addNote.js');
-  await addNote(answers.noteText);
+  if (html) {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const formattedContent = `<p style="color: #888; font-size: 0.85em; margin-bottom: 5px;">${timeString}</p>\n${html}`;
+    await addContentToSection('Notes', formattedContent);
+  }
 }
 
 /**
- * Edits a note interactively
+ * Edits a note using the WYSIWYG editor
  * @param {Object} note - The note to edit
  * @param {string} todaySection - Today's section content
  * @returns {Promise<void>}
@@ -154,26 +147,74 @@ async function editNoteInteractive(note, todaySection) {
   term.grabInput(false);
   term.hideCursor(false);
 
-  const { newText } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'newText',
-      message: 'Enter new note text:',
-      default: note.text,
-      validate: (input) => {
-        if (!input.trim()) {
-          return 'Note text cannot be empty';
+  // Get the raw HTML content of the note for editing
+  const lines = todaySection.split('\n');
+  let noteHtml = '';
+  const lineNum = note.lineNumber;
+
+  // Check if there's a timestamp line before the content
+  if (lines[lineNum] && lines[lineNum].includes('style="color: #888"')) {
+    // Collect content lines after the timestamp
+    let j = lineNum + 1;
+    const contentLines = [];
+    while (j < lines.length) {
+      const line = lines[j];
+      contentLines.push(line);
+      // Check if this is the end of the note content
+      if (line.includes('</p>') || line.includes('</ul>') || line.includes('</ol>') || line.includes('</h1>') || line.includes('</h2>') || line.includes('</h3>')) {
+        // Look ahead to see if next line is still part of this note
+        if (j + 1 < lines.length) {
+          const nextLine = lines[j + 1];
+          if (nextLine.startsWith('<p style="color: #888"') || nextLine.startsWith('<h3>') || !nextLine.trim()) {
+            break;
+          }
+        } else {
+          break;
         }
-        return true;
       }
+      j++;
     }
-  ]);
+    noteHtml = contentLines.join('\n');
+  } else {
+    // No timestamp — the note is a simple <p> block
+    noteHtml = `<p>${note.text}</p>`;
+  }
+
+  const newHtml = await openEditor(noteHtml);
 
   term.hideCursor(true);
   term.grabInput(true);
 
-  const updatedSection = updateNoteInSection(todaySection, note.lineNumber, newText);
-  await replaceTodaySection(updatedSection);
+  if (newHtml) {
+    // Replace the old note content in the section
+    const sectionLines = todaySection.split('\n');
+    const startLine = note.lineNumber;
+
+    // Determine how many lines the old note occupies
+    let endLine = startLine;
+    if (sectionLines[startLine] && sectionLines[startLine].includes('style="color: #888"')) {
+      endLine = startLine + 1;
+      // Find end of content
+      while (endLine < sectionLines.length) {
+        if (sectionLines[endLine].includes('</p>') || sectionLines[endLine].includes('</ul>') || sectionLines[endLine].includes('</ol>')) {
+          break;
+        }
+        endLine++;
+      }
+    }
+
+    // Rebuild with timestamp preserved + new HTML content
+    const timestamp = note.timestamp;
+    let replacement;
+    if (timestamp) {
+      replacement = `<p style="color: #888; font-size: 0.85em; margin-bottom: 5px;">${timestamp}</p>\n${newHtml}`;
+    } else {
+      replacement = newHtml;
+    }
+
+    sectionLines.splice(startLine, endLine - startLine + 1, replacement);
+    await replaceTodaySection(sectionLines.join('\n'));
+  }
 }
 
 /**

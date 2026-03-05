@@ -11,7 +11,7 @@ import { listTodos } from '../commands/listTodos.js';
 import { listNotes } from '../commands/listNotes.js';
 import { listRefs } from '../commands/listRefs.js';
 import { addRef } from '../commands/addRef.js';
-import { addNote } from '../commands/addNote.js';
+import { addNote, addNoteInteractive } from '../commands/addNote.js';
 import { configureConfluence } from '../commands/confluence.js';
 import { syncToConfluence } from '../commands/sync.js';
 import { carryoverTodos } from '../commands/carryover.js';
@@ -50,10 +50,12 @@ program
 program
   .command('note [text...]')
   .description('Add a note or manage notes interactively')
-  .action((text) => {
-    // If no text provided, show interactive notes list
-    if (!text || text.length === 0) {
+  .option('-l, --list', 'Open notes list manager')
+  .action((text, options) => {
+    if (options.list) {
       listNotes();
+    } else if (!text || text.length === 0) {
+      addNoteInteractive();
     } else {
       addNote(text.join(' '));
     }
